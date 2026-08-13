@@ -1,0 +1,34 @@
+---
+description: プロジェクト概要と必読ドキュメント
+alwaysApply: true
+---
+
+# watnow-team-dokidoki
+
+仲のいい友達グループ向け「秘密オークション」コミュニケーションゲーム（仮称）。
+PWA 一本。バックエンドは Supabase 完結。
+
+## エージェント向け正本
+
+- 詳細・DoD・制約の正本は `AGENTS.md`（ツール別に本文を複製しない）
+- Claude Code: `CLAUDE.md` / Copilot: `.github/copilot-instructions.md`（入口のみ）
+
+## 必読 docs（変更前に照合）
+
+- `docs/概要まとめる.md` — コンセプト・遊び方
+- `docs/オークションルール.md` — オークション周りの現行コンセプト（役割・出品・ディーラー）
+- `docs/コンセプト変更まとめ.md` — 変更 / 残置 / 廃止の索引
+- `docs/機能要件.md` — 要件の正
+- `docs/画面.md` / `docs/ユーザーフロー .md` — UI・導線
+- `docs/技術選定.md` — スタックと配置方針
+
+## スタック（確定方針）
+
+- Frontend: React 19, TypeScript, Vite, TanStack Router/Query, RHF, Zod, Tailwind, shadcn/ui, PWA
+- Backend: Supabase（Auth / Postgres / RLS / Realtime / Storage / Edge Functions）
+- ビジネスロジック: 複数テーブル整合は PostgreSQL Function、外部 I/O は Edge Functions
+
+## 不変条件
+
+- **グループ完全分離**: RLS + Function 内の明示チェック。他グループデータへの漏れは致命傷
+- 本人が公開してよい秘密のみ扱う。センシティブ情報の扱いを雑にしない

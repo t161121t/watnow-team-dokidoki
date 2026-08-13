@@ -1,0 +1,30 @@
+---
+description: Git / PR / ブランチ運用
+alwaysApply: true
+---
+
+# Git / PR 規則
+
+## ブランチ
+
+- `main` へ直接大きな実装を載せない。作業は feature ブランチで行う
+- 命名例: `feat/auction-bid`, `fix/rls-wallets`, `chore/pr-template`
+
+## コミット
+
+- 日本語または英語で、**なぜ**が分かる短いメッセージにする
+- 例: `Add bid RPC to prevent race on wallet debit`
+- 秘密・生成物・`.DS_Store` を含めない
+
+## PR
+
+- `.github/pull_request_template.md` を埋める（Summary / AI usage / Test plan は必須）
+- レビューしやすいサイズにする。大きい場合は分割するか、分割できない理由を書く
+- マージ条件: テンプレ項目が埋まっている + 最低1人の人間レビュー（チーム合意がある場合）
+
+## レビュー観点（AI生成コード含む）
+
+- 要件・画面 docs とのずれはないか
+- 他グループデータや権限チェックが抜けていないか
+- 不要な依存追加・広すぎる変更がないか
+- ロールバック可能か
