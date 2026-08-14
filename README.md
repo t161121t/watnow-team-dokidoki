@@ -35,12 +35,12 @@
 ```bash
 pnpm env:check
 pnpm install --frozen-lockfile
-cp .env.example .env.local
+cp .env.example .env.development.local
 pnpm supabase:start
 pnpm supabase:status
 ```
 
-Docker互換ランタイムを起動してから`pnpm env:check`と`pnpm supabase:start`を実行する。Windows PowerShellでは`cp`の代わりに`Copy-Item .env.example .env.local`を使う。`supabase:status`に表示されたローカルURLとPublishable keyを`.env.local`へ設定してから、`pnpm dev`を実行する。ローカルSupabaseは外部公開しない。
+Docker互換ランタイムを起動してから`pnpm env:check`と`pnpm supabase:start`を実行する。Windows PowerShellでは`cp`の代わりに`Copy-Item .env.example .env.development.local`を使う。`supabase:status`に表示されたローカルURLとPublishable keyを`.env.development.local`へ設定してから、`pnpm dev`を実行する。ローカルSupabaseは外部公開しない。
 
 ## 開発コマンド
 
@@ -63,7 +63,7 @@ Docker互換ランタイムを起動してから`pnpm env:check`と`pnpm supabas
 
 `edge-smoke`はEdge Functionsの認証付き実行基盤とDeno検査を保つための最小Functionで、DB更新・外部HTTP・本番Secretsは使用しない。デプロイはこのリポジトリの通常検証には含めない。
 
-依存関係はpnpmだけで変更し、lockfileを更新する。DB変更はDashboardだけで済ませず、migrationとして共有する。秘密情報と`.env.local`はコミットしない。
+依存関係はpnpmだけで変更し、lockfileを更新する。DB変更はDashboardだけで済ませず、migrationとして共有する。秘密情報と`.env.*.local`はコミットしない。
 
 VS Code / Cursorでは、リポジトリを開いたときに表示される推奨拡張機能を導入する。`pnpm install`でLefthookが設定され、コミット時にステージ済みの対応ファイルへBiomeの安全な自動修正を適用する。
 

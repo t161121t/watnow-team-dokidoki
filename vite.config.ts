@@ -2,10 +2,12 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { configDefaults, defineConfig } from "vitest/config";
+import { getProductionEnvErrors } from "./scripts/production-env.mjs";
 
-export default defineConfig({
+const config = {
   plugins: [
     tanstackRouter({
       target: "react",
@@ -55,4 +57,18 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "supabase/functions/**"],
     css: true,
   },
+};
+
+export default defineConfig(({ mode }) => {
+  if (mode === "production") {
+    const errors = getProductionEnvErrors(loadEnv(mode, process.cwd(), "VITE_"));
+
+    if (errors.length > 0) {
+      throw new Error(
+        ["Production build refused:", ...errors.map((error) => `- ${error}`)].join("\n"),
+      );
+    }
+  }
+
+  return config;
 });
