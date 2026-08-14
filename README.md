@@ -11,6 +11,7 @@
 | [.github/copilot-instructions.md](./.github/copilot-instructions.md) | Copilot 入口（正本へ誘導） |
 | [.cursor/rules/](./.cursor/rules/) | Cursor 常時規則 |
 | [.agents/skills/](./.agents/skills/) | スキル正本（`.cursor` / `.claude` は symlink） |
+| [docs/環境構築手順.md](./docs/環境構築手順.md) | Windows / macOS 向けの環境構築手順 |
 | [docs/ai-development.md](./docs/ai-development.md) | AI 駆動の開発フロー |
 | [docs/概要まとめる.md](./docs/概要まとめる.md) | コンセプト |
 | [docs/機能要件.md](./docs/機能要件.md) | 機能要件 |
