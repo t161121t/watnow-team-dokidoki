@@ -87,7 +87,6 @@
 | `pnpm check` | BiomeによるLint / Format検査 |
 | `pnpm typecheck` | TypeScript型チェック |
 | `pnpm test` | Vitest |
-| `pnpm test:e2e` | PlaywrightによるChromium / WebKit E2E・アクセシビリティ検査 |
 | `pnpm build` | 本番ビルド |
 | `pnpm edge:fmt` | Edge FunctionsのDeno format |
 | `pnpm verify:web` | Frontendのcheck / typecheck / test / buildの一括確認 |

@@ -20,7 +20,6 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "pnpm build && playwright test",
     "edge:fmt": "deno task --config supabase/deno.json fmt",
     "verify:web": "pnpm check && pnpm typecheck && pnpm test && pnpm build",
     "verify:edge": "deno task --config supabase/deno.json verify",
@@ -54,9 +53,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
     "@biomejs/biome": "2.5.8",
-    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query-devtools": "5.101.4",
     "@tanstack/react-router-devtools": "1.167.1",

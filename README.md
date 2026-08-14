@@ -49,7 +49,6 @@ Docker互換ランタイムを起動してから`pnpm supabase:start`を実行�
 | `pnpm check` / `pnpm check:write` | Biomeによる検査 / 自動修正 |
 | `pnpm typecheck` | TypeScript型チェック |
 | `pnpm test` | Vitest |
-| `pnpm test:e2e` | PlaywrightによるChromium / WebKit E2E・アクセシビリティ検査 |
 | `pnpm build` | 本番ビルド |
 | `pnpm edge:fmt` | Edge FunctionsをDenoで整形 |
 | `pnpm verify:web` | Frontendのcheck、typecheck、test、buildを一括実行 |
@@ -60,8 +59,6 @@ Docker互換ランタイムを起動してから`pnpm supabase:start`を実行�
 | `pnpm supabase:start` / `pnpm supabase:stop` | ローカルSupabaseの起動 / 停止 |
 | `pnpm supabase:reset` | ローカルDBをmigrationとseedから再構築 |
 | `pnpm supabase:types` | ローカルDBからTypeScript型を生成 |
-
-`pnpm test:e2e`の初回実行前に`pnpm exec playwright install chromium webkit`でブラウザを導入する。E2E実行中だけ、本番ビルドを配信するローカルpreviewサーバーが自動起動する。
 
 `edge-smoke`はEdge Functionsの認証付き実行基盤とDeno検査を保つための最小Functionで、DB更新・外部HTTP・本番Secretsは使用しない。デプロイはこのリポジトリの通常検証には含めない。
 

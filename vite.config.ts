@@ -52,7 +52,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    exclude: [...configDefaults.exclude, "e2e/**", "supabase/functions/**"],
+    exclude: [...configDefaults.exclude, "supabase/functions/**"],
     css: true,
   },
 });
