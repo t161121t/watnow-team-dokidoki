@@ -1,10 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { router } from "@/router";
 import "@/styles.css";
+
+const AppDevtools = import.meta.env.DEV
+  ? lazy(() => import("@/devtools").then((module) => ({ default: module.AppDevtools })))
+  : null;
 
 const rootElement = document.getElementById("root");
 
@@ -26,6 +30,11 @@ createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
       <PwaUpdatePrompt />
+      {AppDevtools ? (
+        <Suspense fallback={null}>
+          <AppDevtools />
+        </Suspense>
+      ) : null}
     </QueryClientProvider>
   </StrictMode>,
 );
