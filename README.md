@@ -54,7 +54,8 @@ Docker互換ランタイムを起動してから`pnpm supabase:start`を実行�
 | `pnpm edge:fmt` | Edge FunctionsをDenoで整形 |
 | `pnpm verify:web` | Frontendのcheck、typecheck、test、buildを一括実行 |
 | `pnpm verify:edge` | Edge Functionsのfmt、lint、型、testを一括検査 |
-| `pnpm verify` | FrontendとEdge Functionsを一括検査 |
+| `pnpm verify:db` | 起動済みのローカルDBに対してpgTAPテストを実行 |
+| `pnpm verify` | Frontend、Edge Functions、DB検査を一括実行 |
 | `pnpm ui:add <component>` | shadcn/ui（Base UI）のコンポーネントを追加 |
 | `pnpm supabase:start` / `pnpm supabase:stop` | ローカルSupabaseの起動 / 停止 |
 | `pnpm supabase:reset` | ローカルDBをmigrationとseedから再構築 |

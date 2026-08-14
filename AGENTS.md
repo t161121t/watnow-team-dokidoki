@@ -92,7 +92,8 @@
 | `pnpm edge:fmt` | Edge FunctionsのDeno format |
 | `pnpm verify:web` | Frontendのcheck / typecheck / test / buildの一括確認 |
 | `pnpm verify:edge` | Edge FunctionsのDeno fmt / lint / check / test |
-| `pnpm verify` | Frontend / Edge Functionsの一括確認 |
+| `pnpm verify:db` | 起動済みのローカルDBに対してpgTAPテストを実行 |
+| `pnpm verify` | Frontend / Edge Functions / DB検査の一括確認 |
 | `pnpm ui:add <component>` | shadcn/ui（Base UI）のコンポーネント追加 |
 | `pnpm supabase:start` / `pnpm supabase:stop` | Docker上のローカルSupabase起動 / 停止 |
 | `pnpm supabase:reset` | migrationとseedからローカルDBを再構築 |

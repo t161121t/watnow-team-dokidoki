@@ -65,6 +65,36 @@ jobs:
       - name: Verify Edge Functions
         run: deno task --config supabase/deno.json verify
 
+  database:
+    name: database
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start local database
+        run: pnpm exec supabase db start
+
+      - name: Run database tests
+        run: pnpm verify:db
+
   e2e:
     name: e2e
     runs-on: ubuntu-latest
