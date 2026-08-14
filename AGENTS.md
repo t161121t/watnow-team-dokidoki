@@ -63,6 +63,9 @@
 ## Git / PR
 
 - 作業は feature ブランチ（例: `feat/…`, `fix/…`, `chore/…`）。大きな実装の `main` 直 push は避ける
+- push 前に `pnpm verify` を実行する
+- `main` 向け PR は作成時・再オープン時・追加 push 時に CI を実行する
+- CI の `verify` 成功、承認1件、会話の解決、`main` の最新化を満たしてからマージする
 - PR は `.github/pull_request_template.md` を埋め、**AI usage** にツール名と人間レビュー範囲を書く
 - 1 PR = 1 目的。レビュー15〜30分を目安
 
