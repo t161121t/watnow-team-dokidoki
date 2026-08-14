@@ -10,6 +10,6 @@ export function getSupabaseClient() {
   }
 
   const env = getClientEnv();
-  client = createClient<Database>(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
+  client = createClient<Database>(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY);
   return client;
 }
