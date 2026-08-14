@@ -1,12 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { createSupabaseTypeCommand } from "./supabase-type-command.mjs";
 
-const supabaseCommand = process.platform === "win32" ? "supabase.cmd" : "supabase";
-const result = spawnSync(
-  supabaseCommand,
-  ["gen", "types", "--lang", "typescript", "--local", "--schema", "public"],
-  { encoding: "utf8" },
-);
+const { command, args } = createSupabaseTypeCommand();
+const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
 
 if (result.error) {
   console.error(result.error.message);
