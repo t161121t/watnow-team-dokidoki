@@ -20,8 +20,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: verify
+  web:
+    name: web
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -94,3 +94,24 @@ jobs:
 
       - name: Run database tests
         run: pnpm verify:db
+
+  verify:
+    name: verify
+    if: ${{ always() }}
+    needs:
+      - web
+      - deno
+      - database
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require all verification jobs
+        env:
+          WEB_RESULT: ${{ needs.web.result }}
+          DENO_RESULT: ${{ needs.deno.result }}
+          DATABASE_RESULT: ${{ needs.database.result }}
+        run: |
+          test "$WEB_RESULT" = "success"
+          test "$DENO_RESULT" = "success"
+          test "$DATABASE_RESULT" = "success"
