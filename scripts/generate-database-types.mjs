@@ -1,9 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { createSupabaseEnvironment } from "./supabase-command.mjs";
 import { createSupabaseTypeCommand } from "./supabase-type-command.mjs";
 
 const { command, args } = createSupabaseTypeCommand();
-const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
+const result = spawnSync(command, args, {
+  encoding: "utf8",
+  env: createSupabaseEnvironment(),
+  windowsHide: true,
+});
 
 if (result.error) {
   console.error(result.error.message);

@@ -70,6 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
+      # ECR rate-limited this job; local pnpm commands use the same GHCR mirror.
       SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
 
     steps:
@@ -93,6 +94,8 @@ jobs:
             package.json \
             pnpm-lock.yaml \
             scripts/generate-database-types.mjs \
+            scripts/run-supabase.mjs \
+            scripts/supabase-command.mjs \
             scripts/supabase-type-command.mjs \
             src/types/database.generated.ts \
             supabase/config.toml \
