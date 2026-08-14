@@ -75,6 +75,20 @@
 - [ ] 秘密ファイル（`.env` 等）をステージしていない
 - [ ] 導入済みなら lint / typecheck / test を実行し、結果を PR に書いた（未導入なら「未導入」と明記）
 
-## コマンド（コード追加後に追記）
+## コマンド
 
-アプリ雛形が入り次第、ここに `npm run …` 等を追記する。現状は docs 整備フェーズ。
+| コマンド | 用途 |
+| --- | --- |
+| `pnpm env:check` | Node.js・pnpm・Docker CLIの前提確認 |
+| `pnpm dev` | Vite開発サーバー |
+| `pnpm check` | BiomeによるLint / Format検査 |
+| `pnpm typecheck` | TypeScript型チェック |
+| `pnpm test` | Vitest |
+| `pnpm build` | 本番ビルド |
+| `pnpm verify` | check / typecheck / test / buildの一括確認 |
+| `pnpm ui:add <component>` | shadcn/ui（Base UI）のコンポーネント追加 |
+| `pnpm supabase:start` / `pnpm supabase:stop` | Docker上のローカルSupabase起動 / 停止 |
+| `pnpm supabase:reset` | migrationとseedからローカルDBを再構築 |
+| `pnpm supabase:types` | ローカルDBからTypeScript型を生成 |
+
+パッケージ管理はpnpmに統一する。Supabaseのスキーマ変更はmigrationに残し、生成型を更新する。

@@ -1,0 +1,1 @@
+-- Local development seed data will be added together with the first schema migration.

@@ -13,6 +13,8 @@ dist/
 build/
 .vite/
 coverage/
+.wrangler/
+*.tsbuildinfo
 
 # Editors / local
 .idea/
@@ -20,5 +22,5 @@ coverage/
 *.local
 
 # Supabase local
-supabase/.branches
-supabase/.temp
+supabase/.branches/
+supabase/.temp/
