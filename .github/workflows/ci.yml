@@ -75,36 +75,63 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
         with:
-          version: 11.21.0
-          run_install: false
+          fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - name: Detect database-related changes
+        id: database_changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          required=true
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          if [[ "$EVENT_NAME" == "pull_request" ]] && git diff --quiet "${BASE_SHA}...${HEAD_SHA}" -- \
+            .github/workflows/ci.yml \
+            .node-version \
+            package.json \
+            pnpm-lock.yaml \
+            scripts/generate-database-types.mjs \
+            scripts/supabase-type-command.mjs \
+            src/types/database.generated.ts \
+            supabase/config.toml \
+            supabase/migrations \
+            supabase/seed.sql \
+            supabase/tests/database; then
+            required=false
+          fi
+
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
+      - name: Skip database verification
+        if: steps.database_changes.outputs.required == 'false'
+        run: echo "No database-related changes detected."
+
+      - name: Set up Supabase CLI
+        if: steps.database_changes.outputs.required == 'true'
+        uses: supabase/setup-cli@v3
 
       - name: Start local database
-        run: pnpm exec supabase db start
+        if: steps.database_changes.outputs.required == 'true'
+        run: supabase db start
 
       - name: Verify generated database types are current
+        if: steps.database_changes.outputs.required == 'true'
         run: |
-          pnpm supabase:types
-          if ! git diff --ignore-space-at-eol --exit-code --quiet -- src/types/database.generated.ts; then
+          generated_types="$(mktemp)"
+          trap 'rm -f "$generated_types"' EXIT
+
+          supabase gen types --lang typescript --local --schema public > "$generated_types"
+          if ! git diff --no-index --ignore-space-at-eol --quiet src/types/database.generated.ts "$generated_types"; then
             echo "src/types/database.generated.ts is out of date. Run pnpm supabase:types and commit the result."
-            git diff -- src/types/database.generated.ts
+            git diff --no-index --ignore-space-at-eol -- src/types/database.generated.ts "$generated_types" || true
             exit 1
           fi
 
       - name: Run database tests
-        run: pnpm verify:db
+        if: steps.database_changes.outputs.required == 'true'
+        run: supabase test db
 
   verify:
     name: verify
