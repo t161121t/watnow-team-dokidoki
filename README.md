@@ -60,6 +60,8 @@ Docker互換ランタイムを起動してから`pnpm supabase:start`を実行�
 
 依存関係はpnpmだけで変更し、lockfileを更新する。DB変更はDashboardだけで済ませず、migrationとして共有する。秘密情報と`.env.local`はコミットしない。
 
+VS Code / Cursorでは、リポジトリを開いたときに表示される推奨拡張機能を導入する。`pnpm install`でLefthookが設定され、コミット時にステージ済みの対応ファイルへBiomeの安全な自動修正を適用する。
+
 ## 開発の始め方（概要）
 
 1. Issue を作成する（`.github/ISSUE_TEMPLATE/`）

@@ -1,5 +1,6 @@
 allowBuilds:
   esbuild: true
+  lefthook: true
   supabase: true
   workerd: true
 minimumReleaseAgeExclude:
