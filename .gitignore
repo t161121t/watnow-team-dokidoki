@@ -13,6 +13,8 @@ dist/
 build/
 .vite/
 coverage/
+playwright-report/
+test-results/
 .wrangler/
 *.tsbuildinfo
 

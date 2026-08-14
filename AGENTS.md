@@ -87,6 +87,7 @@
 | `pnpm check` | BiomeによるLint / Format検査 |
 | `pnpm typecheck` | TypeScript型チェック |
 | `pnpm test` | Vitest |
+| `pnpm test:e2e` | PlaywrightによるChromium / WebKit E2E・アクセシビリティ検査 |
 | `pnpm build` | 本番ビルド |
 | `pnpm verify` | check / typecheck / test / buildの一括確認 |
 | `pnpm ui:add <component>` | shadcn/ui（Base UI）のコンポーネント追加 |

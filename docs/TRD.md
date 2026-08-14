@@ -195,12 +195,13 @@
 - RLS + 主要 PostgreSQL Functions（グループ・秘密・wallet・入札・終了確定）
 - Realtime（§5 の広め）
 - Auth（Supabase・provider は広め）
+- Playwrightによる主要導線のE2E・アクセシビリティ検査
 - AI validation は**無料枠で現実的なら** Edge 経由で接続。否则スキップ可能な設計
 - マイナス残高スキーマ許容 + 入札時の非負十分残高チェック
 
 ### 10.2 Phase 2 見通し
 
-- Playwright E2E、pgTAP 拡充、Deno 厳格化（技術選定）
+- Playwright E2Eシナリオ拡充、pgTAP 拡充、Deno 厳格化（技術選定）
 - Web Push 本格運用
 - AI validation の本採用（無料で足りなかった場合）
 - 複数グループへの秘密公開に耐えるデータモデル拡張
@@ -220,7 +221,7 @@
 | --- | --- | --- |
 | 入札 RPC・wallet 整合 | 重点（Vitest / SQL テスト） | |
 | 他グループ拒否（RLS） | 最低限の自動 or 手動手順を PR に残す | pgTAP 拡充 |
-| UI | Testing Library 中心 | Playwright |
+| UI | Testing Library + Playwright（主要導線） | Playwrightシナリオ拡充 |
 | Auth / Realtime | 手動シナリオ可 | 自動化検討 |
 
 危険領域（Auth / RLS / Wallet / 入札）は PR に検証手順を残す（`AGENTS.md` DoD）。
