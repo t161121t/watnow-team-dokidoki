@@ -92,6 +92,15 @@ jobs:
       - name: Start local database
         run: pnpm exec supabase db start
 
+      - name: Verify generated database types are current
+        run: |
+          pnpm supabase:types
+          if ! git diff --ignore-space-at-eol --exit-code --quiet -- src/types/database.generated.ts; then
+            echo "src/types/database.generated.ts is out of date. Run pnpm supabase:types and commit the result."
+            git diff -- src/types/database.generated.ts
+            exit 1
+          fi
+
       - name: Run database tests
         run: pnpm verify:db
 
