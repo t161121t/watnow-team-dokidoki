@@ -5,3 +5,10 @@ pre-commit:
         pnpm exec biome check --write --no-errors-on-unmatched
         --files-ignore-unknown=true {staged_files}
       stage_fixed: true
+    deno-fmt:
+      glob: "supabase/functions/**/*.{ts,json}"
+      run: deno fmt --config supabase/deno.json {staged_files}
+      stage_fixed: true
+    deno-lint:
+      glob: "supabase/functions/**/*.ts"
+      run: deno lint --config supabase/deno.json {staged_files}
