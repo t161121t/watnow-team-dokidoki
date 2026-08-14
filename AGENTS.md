@@ -82,14 +82,17 @@
 
 | コマンド | 用途 |
 | --- | --- |
-| `pnpm env:check` | Node.js・pnpm・Docker CLIの前提確認 |
+| `pnpm env:check` | Node.js・pnpm・Deno・Docker CLIの前提確認 |
 | `pnpm dev` | Vite開発サーバー |
 | `pnpm check` | BiomeによるLint / Format検査 |
 | `pnpm typecheck` | TypeScript型チェック |
 | `pnpm test` | Vitest |
 | `pnpm test:e2e` | PlaywrightによるChromium / WebKit E2E・アクセシビリティ検査 |
 | `pnpm build` | 本番ビルド |
-| `pnpm verify` | check / typecheck / test / buildの一括確認 |
+| `pnpm edge:fmt` | Edge FunctionsのDeno format |
+| `pnpm verify:web` | Frontendのcheck / typecheck / test / buildの一括確認 |
+| `pnpm verify:edge` | Edge FunctionsのDeno fmt / lint / check / test |
+| `pnpm verify` | Frontend / Edge Functionsの一括確認 |
 | `pnpm ui:add <component>` | shadcn/ui（Base UI）のコンポーネント追加 |
 | `pnpm supabase:start` / `pnpm supabase:stop` | Docker上のローカルSupabase起動 / 停止 |
 | `pnpm supabase:reset` | migrationとseedからローカルDBを再構築 |

@@ -24,6 +24,7 @@
 | --- | --- |
 | Node.js | 24 LTS（`.node-version`） |
 | pnpm | 11.21.0（`package.json`で固定） |
+| Deno | 2.9.5（`.dvmrc`、Edge Functionsの検査） |
 | Docker互換ランタイム | Supabaseローカル環境専用。Docker Desktop / OrbStack等 |
 
 フロントエンドはホスト上でViteを実行する。独自のDockerfileやComposeは使用せず、Supabase CLIが必要なコンテナを管理する。全サービスの起動には7GB以上の空きメモリを推奨する。
@@ -50,13 +51,18 @@ Docker互換ランタイムを起動してから`pnpm supabase:start`を実行�
 | `pnpm test` | Vitest |
 | `pnpm test:e2e` | PlaywrightによるChromium / WebKit E2E・アクセシビリティ検査 |
 | `pnpm build` | 本番ビルド |
-| `pnpm verify` | check、typecheck、test、buildを一括実行 |
+| `pnpm edge:fmt` | Edge FunctionsをDenoで整形 |
+| `pnpm verify:web` | Frontendのcheck、typecheck、test、buildを一括実行 |
+| `pnpm verify:edge` | Edge Functionsのfmt、lint、型、testを一括検査 |
+| `pnpm verify` | FrontendとEdge Functionsを一括検査 |
 | `pnpm ui:add <component>` | shadcn/ui（Base UI）のコンポーネントを追加 |
 | `pnpm supabase:start` / `pnpm supabase:stop` | ローカルSupabaseの起動 / 停止 |
 | `pnpm supabase:reset` | ローカルDBをmigrationとseedから再構築 |
 | `pnpm supabase:types` | ローカルDBからTypeScript型を生成 |
 
 `pnpm test:e2e`の初回実行前に`pnpm exec playwright install chromium webkit`でブラウザを導入する。E2E実行中だけ、本番ビルドを配信するローカルpreviewサーバーが自動起動する。
+
+`edge-smoke`はEdge Functionsの認証付き実行基盤とDeno検査を保つための最小Functionで、DB更新・外部HTTP・本番Secretsは使用しない。デプロイはこのリポジトリの通常検証には含めない。
 
 依存関係はpnpmだけで変更し、lockfileを更新する。DB変更はDashboardだけで済ませず、migrationとして共有する。秘密情報と`.env.local`はコミットしない。
 
