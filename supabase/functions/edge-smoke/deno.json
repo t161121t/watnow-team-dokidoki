@@ -1,0 +1,13 @@
+{
+  "imports": {
+    "@supabase/functions-js": "jsr:@supabase/functions-js@2.5.0",
+    "@supabase/server": "npm:@supabase/server@1.4.1"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false
+  }
+}

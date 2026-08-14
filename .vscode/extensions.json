@@ -1,3 +1,8 @@
 {
-  "recommendations": ["biomejs.biome", "bradlc.vscode-tailwindcss", "ms-playwright.playwright"]
+  "recommendations": [
+    "biomejs.biome",
+    "bradlc.vscode-tailwindcss",
+    "denoland.vscode-deno",
+    "ms-playwright.playwright"
+  ]
 }

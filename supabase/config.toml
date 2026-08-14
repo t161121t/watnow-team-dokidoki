@@ -69,6 +69,12 @@ policy = "per_worker"
 inspector_port = 8083
 deno_version = 2
 
+[functions.edge-smoke]
+enabled = true
+verify_jwt = true
+import_map = "./functions/edge-smoke/deno.json"
+entrypoint = "./functions/edge-smoke/index.ts"
+
 [analytics]
 enabled = false
 port = 54327

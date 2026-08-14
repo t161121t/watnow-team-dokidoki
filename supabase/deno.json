@@ -1,0 +1,18 @@
+{
+  "workspace": ["./functions/edge-smoke"],
+  "tasks": {
+    "fmt": "deno fmt functions",
+    "fmt:check": "deno fmt --check functions",
+    "lint": "deno lint functions",
+    "check": "deno check functions/edge-smoke/index.ts functions/tests/edge-smoke/handler.test.ts",
+    "test": "deno test functions/tests",
+    "verify": "deno task fmt:check && deno task lint && deno task check && deno task test"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false
+  }
+}
