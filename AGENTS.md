@@ -82,7 +82,7 @@
 
 | コマンド | 用途 |
 | --- | --- |
-| `pnpm env:check` | Node.js・pnpm・Deno・Docker CLIの前提確認 |
+| `pnpm env:check` | Node.js・pnpm・Denoの固定バージョンとDockerエンジンの確認 |
 | `pnpm dev` | Vite開発サーバー |
 | `pnpm check` | BiomeによるLint / Format検査 |
 | `pnpm typecheck` | TypeScript型チェック |

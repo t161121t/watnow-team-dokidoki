@@ -23,7 +23,7 @@
 
 | ツール | バージョン・用途 |
 | --- | --- |
-| Node.js | 24 LTS（`.node-version`） |
+| Node.js | 24.18.1（`.node-version`で固定） |
 | pnpm | 11.21.0（`package.json`で固定） |
 | Deno | 2.9.5（`.dvmrc`、Edge Functionsの検査） |
 | Docker互換ランタイム | Supabaseローカル環境専用。Docker Desktop / OrbStack等 |
@@ -40,7 +40,7 @@ pnpm supabase:start
 pnpm supabase:status
 ```
 
-Docker互換ランタイムを起動してから`pnpm supabase:start`を実行する。Windows PowerShellでは`cp`の代わりに`Copy-Item .env.example .env.local`を使う。`supabase:status`に表示されたローカルURLとanon keyを`.env.local`へ設定してから、`pnpm dev`を実行する。ローカルSupabaseは外部公開しない。
+Docker互換ランタイムを起動してから`pnpm env:check`と`pnpm supabase:start`を実行する。Windows PowerShellでは`cp`の代わりに`Copy-Item .env.example .env.local`を使う。`supabase:status`に表示されたローカルURLとanon keyを`.env.local`へ設定してから、`pnpm dev`を実行する。ローカルSupabaseは外部公開しない。
 
 ## 開発コマンド
 
