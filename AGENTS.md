@@ -34,8 +34,9 @@
 3. `docs/コンセプト変更まとめ.md`（変更・残置・廃止の索引）
 4. `docs/機能要件.md`
 5. `docs/技術選定.md`
-6. `docs/画面.md` / `docs/ユーザーフロー .md`
-7. `docs/ai-development.md`
+6. `docs/ディレクトリ構成.md`
+7. `docs/画面.md` / `docs/ユーザーフロー .md`
+8. `docs/ai-development.md`
 
 ## スタック（要約）
 

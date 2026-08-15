@@ -1,4 +1,4 @@
-export function App() {
+export function HomePage() {
   return (
     <main className="grid min-h-svh place-items-center bg-background px-6 text-foreground">
       <div className="text-center">

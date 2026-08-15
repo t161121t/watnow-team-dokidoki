@@ -7,7 +7,9 @@ import { router } from "@/router";
 import "@/styles.css";
 
 const AppDevtools = import.meta.env.DEV
-  ? lazy(() => import("@/devtools").then((module) => ({ default: module.AppDevtools })))
+  ? lazy(() =>
+      import("@/components/app-devtools").then((module) => ({ default: module.AppDevtools })),
+    )
   : null;
 
 const rootElement = document.getElementById("root");

@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { App } from "@/app";
+import { HomePage } from "@/features/home/home-page";
 
-describe("App", () => {
+describe("HomePage", () => {
   it("renders the environment-ready placeholder", () => {
-    render(<App />);
+    render(<HomePage />);
 
     expect(screen.getByRole("heading", { name: "watnow-team-dokidoki" })).toBeInTheDocument();
   });
