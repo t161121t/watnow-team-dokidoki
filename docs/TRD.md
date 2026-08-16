@@ -82,7 +82,7 @@
 | --- | --- | --- |
 | Supabase Auth | ✅ | Email / Magic Link / OAuth（Google 等）を技術的に許容 |
 | どの provider を本番でオンにするか | 運用で決定 | 本 TRD では「Supabase Auth 広め」まで固定。特定1方式への絞り込みは未確定 |
-| プロフィール（ニックネーム・アイコン） | ✅ | `profiles` 等で Auth ユーザーに紐づけ |
+| プロフィール（ニックネーム・アイコン） | ✅ | `users` 等で Auth ユーザーに紐づけ |
 
 セッションは Supabase クライアントの標準フローに従う。
 
@@ -110,7 +110,7 @@
 
 | エンティティ | 要点 |
 | --- | --- |
-| `profiles` | ユーザー表示名、アイコン |
+| `users` | ユーザー表示名、アイコン |
 | `groups` | グループ名・アイコン、`group_auction_settings`（オークション設定。値は P1–P12 確定。`auction_open_seconds` のみ幹事が変更可） |
 | `group_members` | 所属、役割（member / admin） |
 | `wallets` | `(group_id, user_id)` 一意。残高（**マイナス可**）。入札は残高不足なら拒否 |
