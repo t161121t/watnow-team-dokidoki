@@ -73,6 +73,8 @@ MVP では選択中グループに 1 件だけ作ればよい。Phase 2 の「�
 
 ---
 
+
+
 ## 2. 論理 ER
 
 ```text
@@ -106,38 +108,48 @@ wallets
 
 ---
 
+
+
 ## 3. Enum / 型
 
 実装時は PostgreSQL enum か check constraint で定義する。
 
-| 型 | 値 |
-| --- | --- |
-| `member_role` | `member`, `admin` |
-| `member_status` | `active`, `left`, `kicked` |
-| `secret_item_status` | `registered`, `listed`, `on_auction`, `sold`, `returned`, `withdrawn` |
-| `auction_status` | `scheduled`, `open`, `finalizing`, `sold`, `no_sale`, `canceled` |
-| `bid_status` | `valid`, `superseded`, `winning`, `canceled` |
-| `wallet_tx_kind` | `challenge_reward`, `listing_prepay`, `listing_reclaim`, `winning_bid_debit`, `seller_share_credit`, `dealer_share_credit`, `dealer_decline_fee`, `admin_adjustment` |
-| `challenge_status` | `active`, `archived` |
-| `attempt_status` | `pending`, `approved`, `rejected`, `awarded`, `canceled` |
-| `approval_decision` | `approved`, `rejected` |
-| `validation_status` | `not_required`, `pending`, `passed`, `failed`, `skipped` |
+
+| 型                    | 値                                                                                                                                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `member_role`        | `member`, `admin`                                                                                                                                                    |
+| `member_status`      | `active`, `left`, `kicked`                                                                                                                                           |
+| `secret_item_status` | `registered`, `listed`, `on_auction`, `sold`, `returned`, `withdrawn`                                                                                                |
+| `auction_status`     | `scheduled`, `open`, `finalizing`, `sold`, `no_sale`, `canceled`                                                                                                     |
+| `bid_status`         | `valid`, `superseded`, `winning`, `canceled`, `failed`                                                                                                               |
+| `wallet_tx_kind`     | `challenge_reward`, `listing_prepay`, `listing_reclaim`, `winning_bid_debit`, `seller_share_credit`, `dealer_share_credit`, `dealer_decline_fee`, `admin_adjustment` |
+| `challenge_status`   | `active`, `archived`                                                                                                                                                 |
+| `attempt_status`     | `pending`, `approved`, `rejected`, `awarded`, `canceled`                                                                                                             |
+| `approval_decision`  | `approved`, `rejected`                                                                                                                                               |
+| `validation_status`  | `not_required`, `pending`, `passed`, `failed`, `skipped`                                                                                                             |
+
 
 ---
 
+
+
 ## 4. テーブル設計
+
+
 
 ### 4.1 `profiles`
 
 Supabase Auth のユーザーに紐づく表示用プロフィール。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK。`auth.users.id` |
-| `nickname` | `text` | not null |
-| `avatar_path` | `text` | Storage path。nullable |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
+
+| カラム           | 型             | 制約 / 用途               |
+| ------------- | ------------- | --------------------- |
+| `id`          | `uuid`        | PK。`auth.users.id`    |
+| `nickname`    | `text`        | not null              |
+| `avatar_path` | `text`        | Storage path。nullable |
+| `created_at`  | `timestamptz` | not null              |
+| `updated_at`  | `timestamptz` | not null              |
+
 
 RLS:
 
@@ -147,19 +159,23 @@ RLS:
 
 ---
 
+
+
 ### 4.2 `groups`
 
 友達グループ本体。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `name` | `text` | not null |
-| `icon_path` | `text` | nullable |
-| `created_by` | `uuid` | FK `profiles.id` |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
-| `archived_at` | `timestamptz` | nullable |
+
+| カラム           | 型             | 制約 / 用途          |
+| ------------- | ------------- | ---------------- |
+| `id`          | `uuid`        | PK               |
+| `name`        | `text`        | not null         |
+| `icon_path`   | `text`        | nullable         |
+| `created_by`  | `uuid`        | FK `profiles.id` |
+| `created_at`  | `timestamptz` | not null         |
+| `updated_at`  | `timestamptz` | not null         |
+| `archived_at` | `timestamptz` | nullable         |
+
 
 RLS:
 
@@ -169,18 +185,22 @@ RLS:
 
 ---
 
+
+
 ### 4.3 `group_members`
 
 ユーザーの所属・権限。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `group_id` | `uuid` | PK part / FK `groups.id` |
-| `user_id` | `uuid` | PK part / FK `profiles.id` |
-| `role` | `member_role` | not null |
-| `status` | `member_status` | not null default `active` |
-| `joined_at` | `timestamptz` | not null |
-| `left_at` | `timestamptz` | nullable |
+
+| カラム         | 型               | 制約 / 用途                    |
+| ----------- | --------------- | -------------------------- |
+| `group_id`  | `uuid`          | PK part / FK `groups.id`   |
+| `user_id`   | `uuid`          | PK part / FK `profiles.id` |
+| `role`      | `member_role`   | not null                   |
+| `status`    | `member_status` | not null default `active`  |
+| `joined_at` | `timestamptz`   | not null                   |
+| `left_at`   | `timestamptz`   | nullable                   |
+
 
 制約:
 
@@ -195,21 +215,25 @@ RLS:
 
 ---
 
+
+
 ### 4.4 `group_invites`
 
 招待コード / 招待リンク。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `code_hash` | `text` | unique。平文コードは保存しない |
-| `created_by` | `uuid` | FK `profiles.id` |
-| `expires_at` | `timestamptz` | nullable |
-| `max_uses` | `int` | nullable |
-| `used_count` | `int` | not null default 0 |
-| `revoked_at` | `timestamptz` | nullable |
-| `created_at` | `timestamptz` | not null |
+
+| カラム          | 型             | 制約 / 用途            |
+| ------------ | ------------- | ------------------ |
+| `id`         | `uuid`        | PK                 |
+| `group_id`   | `uuid`        | FK `groups.id`     |
+| `code_hash`  | `text`        | unique。平文コードは保存しない |
+| `created_by` | `uuid`        | FK `profiles.id`   |
+| `expires_at` | `timestamptz` | nullable           |
+| `max_uses`   | `int`         | nullable           |
+| `used_count` | `int`         | not null default 0 |
+| `revoked_at` | `timestamptz` | nullable           |
+| `created_at` | `timestamptz` | not null           |
+
 
 RLS:
 
@@ -218,29 +242,33 @@ RLS:
 
 ---
 
+
+
 ### 4.5 `group_auction_settings`
 
 オークション未確定パラメータ P1-P12 の置き場。未確定値は null 許容にし、実装時に確定した値から not null 化を検討する。
 
-| カラム | 型 | 対応 |
-| --- | --- | --- |
-| `group_id` | `uuid` | PK / FK `groups.id` |
-| `listing_wait_seconds` | `int` | P1 |
-| `auction_open_seconds` | `int` | P2 |
-| `start_price_add` | `int` | P3 |
-| `start_price_multiplier` | `numeric` | P3 |
-| `listing_prepay_rate` | `numeric` | P4 |
-| `listing_prepay_fixed` | `int` | P4 |
-| `seller_bonus_rate` | `numeric` | P5 |
-| `no_sale_depreciation_rate` | `numeric` | P6 |
-| `dealer_share_rate` | `numeric` | P7 |
-| `seller_share_rate` | `numeric` | P7 |
-| `dealer_can_see_bidders` | `boolean` | P9 |
-| `min_balance_limit` | `int` | P11 |
-| `dealer_decline_fee_fixed` | `int` | P12 |
-| `dealer_decline_fee_rate` | `numeric` | P12 |
-| `updated_by` | `uuid` | FK `profiles.id` |
-| `updated_at` | `timestamptz` | not null |
+
+| カラム                         | 型             | 対応                  |
+| --------------------------- | ------------- | ------------------- |
+| `group_id`                  | `uuid`        | PK / FK `groups.id` |
+| `listing_wait_seconds`      | `int`         | P1                  |
+| `auction_open_seconds`      | `int`         | P2                  |
+| `start_price_add`           | `int`         | P3                  |
+| `start_price_multiplier`    | `numeric`     | P3                  |
+| `listing_prepay_rate`       | `numeric`     | P4                  |
+| `listing_prepay_fixed`      | `int`         | P4                  |
+| `seller_bonus_rate`         | `numeric`     | P5                  |
+| `no_sale_depreciation_rate` | `numeric`     | P6                  |
+| `dealer_share_rate`         | `numeric`     | P7                  |
+| `seller_share_rate`         | `numeric`     | P7                  |
+| `dealer_can_see_bidders`    | `boolean`     | P9                  |
+| `min_balance_limit`         | `int`         | P11                 |
+| `dealer_decline_fee_fixed`  | `int`         | P12                 |
+| `dealer_decline_fee_rate`   | `numeric`     | P12                 |
+| `updated_by`                | `uuid`        | FK `profiles.id`    |
+| `updated_at`                | `timestamptz` | not null            |
+
 
 補足:
 
@@ -250,18 +278,22 @@ RLS:
 
 ---
 
+
+
 ### 4.6 `wallets`
 
 グループ内の個人財布。ポイントはグループ横断で合算しない。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `group_id` | `uuid` | PK part / FK `groups.id` |
-| `user_id` | `uuid` | PK part / FK `profiles.id` |
-| `balance` | `int` | not null。マイナス可 |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
-| `expired_at` | `timestamptz` | グループ脱退時に失効 |
+
+| カラム          | 型             | 制約 / 用途                    |
+| ------------ | ------------- | -------------------------- |
+| `group_id`   | `uuid`        | PK part / FK `groups.id`   |
+| `user_id`    | `uuid`        | PK part / FK `profiles.id` |
+| `balance`    | `int`         | not null。マイナス可             |
+| `created_at` | `timestamptz` | not null                   |
+| `updated_at` | `timestamptz` | not null                   |
+| `expired_at` | `timestamptz` | グループ脱退時に失効                 |
+
 
 制約:
 
@@ -277,22 +309,26 @@ RLS:
 
 ---
 
+
+
 ### 4.7 `wallet_ledger`
 
 ポイント増減履歴。残高の監査ログ。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `user_id` | `uuid` | FK `profiles.id` |
-| `amount` | `int` | not null。増加は正、減少は負 |
-| `balance_after` | `int` | not null |
-| `kind` | `wallet_tx_kind` | not null |
-| `ref_table` | `text` | 参照元テーブル名 |
-| `ref_id` | `uuid` | 参照元 id |
-| `created_by` | `uuid` | 実行ユーザー。cron 等は nullable |
-| `created_at` | `timestamptz` | not null |
+
+| カラム             | 型                | 制約 / 用途                 |
+| --------------- | ---------------- | ----------------------- |
+| `id`            | `uuid`           | PK                      |
+| `group_id`      | `uuid`           | FK `groups.id`          |
+| `user_id`       | `uuid`           | FK `profiles.id`        |
+| `amount`        | `int`            | not null。増加は正、減少は負      |
+| `balance_after` | `int`            | not null                |
+| `kind`          | `wallet_tx_kind` | not null                |
+| `ref_table`     | `text`           | 参照元テーブル名                |
+| `ref_id`        | `uuid`           | 参照元 id                  |
+| `created_by`    | `uuid`           | 実行ユーザー。cron 等は nullable |
+| `created_at`    | `timestamptz`    | not null                |
+
 
 制約:
 
@@ -307,21 +343,25 @@ RLS:
 
 ---
 
+
+
 ### 4.8 `secrets`
 
 秘密本文そのもの。グループ公開状態は持たない。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `owner_id` | `uuid` | FK `profiles.id` |
-| `body` | `text` | 秘密本文。落札まで秘匿 |
-| `summary` | `text` | ディーラー・一覧用の概要。本文を直接含めすぎない |
-| `category` | `text` | 恋愛 / 黒歴史 / 趣味 / 特技など。初期は text、安定後 lookup 化 |
-| `rarity` | `smallint` | 自己申告。例: 1-5 |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
-| `deleted_at` | `timestamptz` | 出品前削除用 soft delete |
+
+| カラム          | 型             | 制約 / 用途                                    |
+| ------------ | ------------- | ------------------------------------------ |
+| `id`         | `uuid`        | PK                                         |
+| `owner_id`   | `uuid`        | FK `profiles.id`                           |
+| `body`       | `text`        | 秘密本文。落札まで秘匿                                |
+| `summary`    | `text`        | ディーラー・一覧用の概要。本文を直接含めすぎない                   |
+| `category`   | `text`        | 恋愛 / 黒歴史 / 趣味 / 特技など。初期は text、安定後 lookup 化 |
+| `rarity`     | `smallint`    | 自己申告。例: 1-5                                |
+| `created_at` | `timestamptz` | not null                                   |
+| `updated_at` | `timestamptz` | not null                                   |
+| `deleted_at` | `timestamptz` | 出品前削除用 soft delete                         |
+
 
 制約:
 
@@ -336,23 +376,27 @@ RLS:
 
 ---
 
+
+
 ### 4.9 `secret_group_items`
 
 秘密が特定グループ内でどの状態にあるかを表す。在庫・出品前ステータス。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `secret_id` | `uuid` | FK `secrets.id` |
-| `group_id` | `uuid` | FK `groups.id` |
-| `seller_id` | `uuid` | FK `profiles.id`。基本は `secrets.owner_id` |
-| `status` | `secret_item_status` | not null |
-| `asking_price` | `int` | 出品者の自己設定価格 |
-| `current_value` | `int` | 不落札目減り後の価値 |
-| `validation_status` | `validation_status` | AI validation の状態 |
-| `validation_note` | `text` | nullable |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
+
+| カラム                 | 型                    | 制約 / 用途                                 |
+| ------------------- | -------------------- | --------------------------------------- |
+| `id`                | `uuid`               | PK                                      |
+| `secret_id`         | `uuid`               | FK `secrets.id`                         |
+| `group_id`          | `uuid`               | FK `groups.id`                          |
+| `seller_id`         | `uuid`               | FK `profiles.id`。基本は `secrets.owner_id` |
+| `status`            | `secret_item_status` | not null                                |
+| `asking_price`      | `int`                | 出品者の自己設定価格                              |
+| `current_value`     | `int`                | 不落札目減り後の価値                              |
+| `validation_status` | `validation_status`  | AI validation の状態                       |
+| `validation_note`   | `text`               | nullable                                |
+| `created_at`        | `timestamptz`        | not null                                |
+| `updated_at`        | `timestamptz`        | not null                                |
+
 
 制約:
 
@@ -369,32 +413,36 @@ RLS:
 
 ---
 
+
+
 ### 4.10 `auctions`
 
 出品実施から競り終了までを表す。1 つの `secret_group_items` は、返却後の再出品により複数 auction を持ち得る。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `secret_group_item_id` | `uuid` | FK `secret_group_items.id` |
-| `seller_id` | `uuid` | FK `profiles.id` |
-| `dealer_id` | `uuid` | FK `profiles.id` |
-| `status` | `auction_status` | not null |
-| `starting_price` | `int` | not null |
-| `current_price` | `int` | not null |
-| `starts_at` | `timestamptz` | not null |
-| `ends_at` | `timestamptz` | not null |
-| `winner_id` | `uuid` | nullable |
-| `winning_bid_id` | `uuid` | nullable |
-| `final_price` | `int` | nullable |
-| `listing_prepay_amount` | `int` | P4 の実値 |
-| `seller_share_amount` | `int` | 確定時に保存 |
-| `dealer_share_amount` | `int` | 確定時に保存 |
-| `no_sale_depreciation_amount` | `int` | 不落札時に保存 |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
-| `finalized_at` | `timestamptz` | nullable |
+
+| カラム                           | 型                | 制約 / 用途                    |
+| ----------------------------- | ---------------- | -------------------------- |
+| `id`                          | `uuid`           | PK                         |
+| `group_id`                    | `uuid`           | FK `groups.id`             |
+| `secret_group_item_id`        | `uuid`           | FK `secret_group_items.id` |
+| `seller_id`                   | `uuid`           | FK `profiles.id`           |
+| `dealer_id`                   | `uuid`           | FK `profiles.id`           |
+| `status`                      | `auction_status` | not null                   |
+| `starting_price`              | `int`            | not null                   |
+| `current_price`               | `int`            | not null                   |
+| `starts_at`                   | `timestamptz`    | not null                   |
+| `ends_at`                     | `timestamptz`    | not null                   |
+| `winner_id`                   | `uuid`           | nullable                   |
+| `winning_bid_id`              | `uuid`           | nullable                   |
+| `final_price`                 | `int`            | nullable                   |
+| `listing_prepay_amount`       | `int`            | P4 の実値                     |
+| `seller_share_amount`         | `int`            | 確定時に保存                     |
+| `dealer_share_amount`         | `int`            | 確定時に保存                     |
+| `no_sale_depreciation_amount` | `int`            | 不落札時に保存                    |
+| `created_at`                  | `timestamptz`    | not null                   |
+| `updated_at`                  | `timestamptz`    | not null                   |
+| `finalized_at`                | `timestamptz`    | nullable                   |
+
 
 制約:
 
@@ -403,8 +451,8 @@ RLS:
 - `starting_price >= 0`
 - `current_price >= starting_price`
 - `dealer_id` は同 group の active member
-- `dealer_id` は当該 auction に入札不可
-- `seller_id` は当該 auction に入札不可
+
+`dealer_id` / `seller_id` は当該 auction に入札できない。これは `auctions` 単体の check constraint では表現できないため（`bids` 側の行を見る必要がある）、`place_bid` RPC 側で保証する。詳細は §4.11 の制約を参照。
 
 RLS:
 
@@ -416,19 +464,23 @@ RLS:
 
 ---
 
+
+
 ### 4.11 `bids`
 
 入札履歴。エスクローはしないため、insert 時点では wallet を減らさない。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `auction_id` | `uuid` | FK `auctions.id` |
-| `bidder_id` | `uuid` | FK `profiles.id` |
-| `amount` | `int` | not null |
-| `status` | `bid_status` | not null default `valid` |
-| `created_at` | `timestamptz` | not null |
+
+| カラム          | 型             | 制約 / 用途                  |
+| ------------ | ------------- | ------------------------ |
+| `id`         | `uuid`        | PK                       |
+| `group_id`   | `uuid`        | FK `groups.id`           |
+| `auction_id` | `uuid`        | FK `auctions.id`         |
+| `bidder_id`  | `uuid`        | FK `profiles.id`         |
+| `amount`     | `int`         | not null                 |
+| `status`     | `bid_status`  | not null default `valid` |
+| `created_at` | `timestamptz` | not null                 |
+
 
 制約:
 
@@ -441,6 +493,12 @@ RLS:
 
 直接 CHECK では他テーブル参照できないため、入札制約は `place_bid` RPC と transaction lock で保証する。
 
+`status` の遷移補足:
+
+- `winning`: `finalize_auction` で最終的に落札が決まった bid
+- `failed`: 確定時点で bidder の残高が不足しており、次点へ繰り上げるために無効化された bid（§10.2.1 参照）。入札自体は有効だったが決済できなかったことを示す
+- それ以外の `valid` な bid は `finalize_auction` 後もそのまま `valid` で残る（`winning` にも `failed` にもならない、落札に絡まなかった入札）
+
 RLS:
 
 - direct insert は禁止。`place_bid` RPC のみ
@@ -451,19 +509,23 @@ RLS:
 
 ---
 
+
+
 ### 4.12 `secret_accesses`
 
 落札後の閲覧権。コレクション表示の正本。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `secret_id` | `uuid` | FK `secrets.id` |
-| `secret_group_item_id` | `uuid` | FK `secret_group_items.id` |
-| `auction_id` | `uuid` | FK `auctions.id` |
-| `user_id` | `uuid` | FK `profiles.id` |
-| `granted_at` | `timestamptz` | not null |
+
+| カラム                    | 型             | 制約 / 用途                    |
+| ---------------------- | ------------- | -------------------------- |
+| `id`                   | `uuid`        | PK                         |
+| `group_id`             | `uuid`        | FK `groups.id`             |
+| `secret_id`            | `uuid`        | FK `secrets.id`            |
+| `secret_group_item_id` | `uuid`        | FK `secret_group_items.id` |
+| `auction_id`           | `uuid`        | FK `auctions.id`           |
+| `user_id`              | `uuid`        | FK `profiles.id`           |
+| `granted_at`           | `timestamptz` | not null                   |
+
 
 制約:
 
@@ -478,19 +540,23 @@ RLS:
 
 ---
 
+
+
 ### 4.13 `dealer_declines`
 
 ディーラー辞退履歴。P12 が確定するまで実値は nullable を許容する。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `auction_id` | `uuid` | FK `auctions.id` |
-| `dealer_id` | `uuid` | FK `profiles.id` |
-| `fee_amount` | `int` | 辞退料 |
-| `wallet_ledger_id` | `uuid` | FK `wallet_ledger.id` |
-| `created_at` | `timestamptz` | not null |
+
+| カラム                | 型             | 制約 / 用途               |
+| ------------------ | ------------- | --------------------- |
+| `id`               | `uuid`        | PK                    |
+| `group_id`         | `uuid`        | FK `groups.id`        |
+| `auction_id`       | `uuid`        | FK `auctions.id`      |
+| `dealer_id`        | `uuid`        | FK `profiles.id`      |
+| `fee_amount`       | `int`         | 辞退料                   |
+| `wallet_ledger_id` | `uuid`        | FK `wallet_ledger.id` |
+| `created_at`       | `timestamptz` | not null              |
+
 
 RLS:
 
@@ -499,24 +565,28 @@ RLS:
 
 ---
 
+
+
 ### 4.14 `challenges`
 
 ミニゲーム / チャレンジの定義。システム提供内容は未定のため、まずは汎用的な器にする。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | nullable。null は system challenge |
-| `created_by` | `uuid` | nullable。group 独自なら admin |
-| `title` | `text` | not null |
-| `description` | `text` | nullable |
-| `reward_points` | `int` | not null |
-| `requires_evidence_photo` | `boolean` | default false |
-| `required_approvals` | `int` | not null default 1 |
-| `cooldown_seconds` | `int` | nullable |
-| `status` | `challenge_status` | not null |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
+
+| カラム                       | 型                  | 制約 / 用途                          |
+| ------------------------- | ------------------ | -------------------------------- |
+| `id`                      | `uuid`             | PK                               |
+| `group_id`                | `uuid`             | nullable。null は system challenge |
+| `created_by`              | `uuid`             | nullable。group 独自なら admin        |
+| `title`                   | `text`             | not null                         |
+| `description`             | `text`             | nullable                         |
+| `reward_points`           | `int`              | not null                         |
+| `requires_evidence_photo` | `boolean`          | default false                    |
+| `required_approvals`      | `int`              | not null default 1               |
+| `cooldown_seconds`        | `int`              | nullable                         |
+| `status`                  | `challenge_status` | not null                         |
+| `created_at`              | `timestamptz`      | not null                         |
+| `updated_at`              | `timestamptz`      | not null                         |
+
 
 制約:
 
@@ -531,23 +601,27 @@ RLS:
 
 ---
 
+
+
 ### 4.15 `challenge_attempts`
 
 チャレンジ挑戦履歴。ポイント付与先 group を必ず持つ。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `id` | `uuid` | PK |
-| `group_id` | `uuid` | FK `groups.id` |
-| `challenge_id` | `uuid` | FK `challenges.id` |
-| `user_id` | `uuid` | FK `profiles.id` |
-| `status` | `attempt_status` | not null |
-| `evidence_path` | `text` | Storage path |
-| `reward_points` | `int` | 承認時点の実値を保存 |
-| `awarded_ledger_id` | `uuid` | FK `wallet_ledger.id` |
-| `created_at` | `timestamptz` | not null |
-| `updated_at` | `timestamptz` | not null |
-| `awarded_at` | `timestamptz` | nullable |
+
+| カラム                 | 型                | 制約 / 用途               |
+| ------------------- | ---------------- | --------------------- |
+| `id`                | `uuid`           | PK                    |
+| `group_id`          | `uuid`           | FK `groups.id`        |
+| `challenge_id`      | `uuid`           | FK `challenges.id`    |
+| `user_id`           | `uuid`           | FK `profiles.id`      |
+| `status`            | `attempt_status` | not null              |
+| `evidence_path`     | `text`           | Storage path          |
+| `reward_points`     | `int`            | 承認時点の実値を保存            |
+| `awarded_ledger_id` | `uuid`           | FK `wallet_ledger.id` |
+| `created_at`        | `timestamptz`    | not null              |
+| `updated_at`        | `timestamptz`    | not null              |
+| `awarded_at`        | `timestamptz`    | nullable              |
+
 
 制約:
 
@@ -561,16 +635,20 @@ RLS:
 
 ---
 
+
+
 ### 4.16 `challenge_approvals`
 
 複数人承認の記録。
 
-| カラム | 型 | 制約 / 用途 |
-| --- | --- | --- |
-| `attempt_id` | `uuid` | PK part / FK `challenge_attempts.id` |
-| `approver_id` | `uuid` | PK part / FK `profiles.id` |
-| `decision` | `approval_decision` | not null |
-| `created_at` | `timestamptz` | not null |
+
+| カラム           | 型                   | 制約 / 用途                              |
+| ------------- | ------------------- | ------------------------------------ |
+| `attempt_id`  | `uuid`              | PK part / FK `challenge_attempts.id` |
+| `approver_id` | `uuid`              | PK part / FK `profiles.id`           |
+| `decision`    | `approval_decision` | not null                             |
+| `created_at`  | `timestamptz`       | not null                             |
+
 
 制約:
 
@@ -585,6 +663,8 @@ RLS:
 
 ---
 
+
+
 ### 4.17 `storage_objects_meta`
 
 Supabase Storage 自体は `storage.objects` を使う。アプリ側で参照しやすい metadata が必要になった場合のみ追加する。
@@ -597,14 +677,20 @@ Supabase Storage 自体は `storage.objects` を使う。アプリ側で参照�
 
 Storage bucket 案:
 
-| bucket | 用途 | 公開 |
-| --- | --- | --- |
-| `avatars` | user / group icon | public または signed URL |
-| `challenge-evidence` | チャレンジ写真 | private |
+
+| bucket               | 用途                | 公開                    |
+| -------------------- | ----------------- | --------------------- |
+| `avatars`            | user / group icon | public または signed URL |
+| `challenge-evidence` | チャレンジ写真           | private               |
+
 
 ---
 
+
+
 ## 5. View 設計
+
+
 
 ### 5.1 `auction_public_view`
 
@@ -631,6 +717,8 @@ Storage bucket 案:
 - 秘密本文
 - 入札者 ID
 
+
+
 ### 5.2 `seller_bid_view`
 
 出品者向け。自分の auction の入札者を識別可能にする。
@@ -648,6 +736,8 @@ RLS / view 条件:
 
 - `auctions.seller_id = auth.uid()`
 
+
+
 ### 5.3 `anonymous_bid_feed_view`
 
 出品者以外の参加者向け。
@@ -663,6 +753,8 @@ RLS / view 条件:
 
 - `bidder_id`
 - `bidder_nickname`
+
+
 
 ### 5.4 `my_secret_collection_view`
 
@@ -687,72 +779,99 @@ RLS / view 条件:
 
 ---
 
+
+
 ## 6. RPC 設計
+
+
 
 ### 6.1 アカウント / グループ
 
-| RPC | 責務 |
-| --- | --- |
-| `create_group(name, icon_path)` | group 作成、作成者を admin member にする、wallet 初期化、settings 初期化 |
-| `join_group(invite_code)` | invite 検証、member 追加、wallet 初期化 |
-| `leave_group(group_id)` | member status を left、wallet を expired。最後の admin なら拒否 |
-| `update_group_member_role(group_id, user_id, role)` | admin 権限付与 / 剥奪。最後の admin 剥奪は拒否 |
-| `kick_group_member(group_id, user_id)` | admin による kick。wallet 失効 |
+
+| RPC                                                 | 責務                                                     |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| `create_group(name, icon_path)`                     | group 作成、作成者を admin member にする、wallet 初期化、settings 初期化 |
+| `join_group(invite_code)`                           | invite 検証、member 追加、wallet 初期化                         |
+| `leave_group(group_id)`                             | member status を left、wallet を expired。最後の admin なら拒否   |
+| `update_group_member_role(group_id, user_id, role)` | admin 権限付与 / 剥奪。最後の admin 剥奪は拒否                        |
+| `kick_group_member(group_id, user_id)`              | admin による kick。wallet 失効                               |
+
+
+
 
 ### 6.2 秘密 / 出品
 
-| RPC | 責務 |
-| --- | --- |
+
+| RPC                                                                        | 責務                                                 |
+| -------------------------------------------------------------------------- | -------------------------------------------------- |
 | `register_secret(group_id, body, summary, category, rarity, asking_price)` | secrets と secret_group_items を作成。MVP は選択中 group のみ |
-| `update_secret_before_listing(secret_id, ...)` | 出品前のみ編集 |
-| `delete_secret_before_listing(secret_id)` | 出品前のみ soft delete |
-| `publish_secret_to_group(secret_id, group_id, asking_price)` | Phase 2 の複数 group 公開用 |
-| `list_secret_for_auction(secret_group_item_id)` | listed 化、開始時刻計算、dealer 選抜、前払い credit |
+| `update_secret_before_listing(secret_id, ...)`                             | 出品前のみ編集                                            |
+| `delete_secret_before_listing(secret_id)`                                  | 出品前のみ soft delete                                  |
+| `publish_secret_to_group(secret_id, group_id, asking_price)`               | Phase 2 の複数 group 公開用                              |
+| `list_secret_for_auction(secret_group_item_id)`                            | listed 化、開始時刻計算、dealer 選抜、前払い credit               |
+
+
+
 
 ### 6.3 オークション / 入札
 
-| RPC | 責務 |
-| --- | --- |
-| `open_due_auctions()` | `scheduled` かつ `starts_at <= now()` を `open` にする |
+
+| RPC                             | 責務                                                      |
+| ------------------------------- | ------------------------------------------------------- |
+| `open_due_auctions()`           | `scheduled` かつ `starts_at <= now()` を `open` にする        |
 | `place_bid(auction_id, amount)` | 所属・状態・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新 |
-| `finalize_auction(auction_id)` | 終了済み auction を確定。勝者 debit、按分 credit、閲覧権付与、status 更新 |
-| `finalize_due_auctions()` | cron 用。終了時刻を過ぎた open auction をまとめて確定 |
-| `decline_dealer(auction_id)` | 辞退料 debit、dealer_declines 追加、dealer 再選抜 |
+| `claim_auction_for_finalize(auction_id)` | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照） |
+| `finalize_auction(auction_id)`  | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit、閲覧権付与、status 更新（Stage B） |
+| `finalize_due_auctions()`       | cron 用。`claim_auction_for_finalize` → `finalize_auction` を終了済み open auction にまとめて適用          |
+| `decline_dealer(auction_id)`    | 辞退料 debit、dealer_declines 追加、dealer 再選抜                 |
 
-`place_bid` の必須 lock:
 
-- 対象 `auctions` 行を `FOR UPDATE`
-- bidder の `wallets` 行を `FOR UPDATE`
-- 最新価格を transaction 内で再確認
+`claim_auction_for_finalize` の必須 lock:
+
+- 対象 `auctions` 行を `status = 'open' AND ends_at <= now()` 条件で `FOR UPDATE`
+- 条件を満たさなければ何もせず終了（cron の重複起動に対する排他はこのクレームで担保する）
 
 `finalize_auction` の必須 lock:
 
-- 対象 `auctions` 行を `FOR UPDATE`
-- winner / seller / dealer の `wallets` 行を `FOR UPDATE`
-- 二重 finalize 防止の status 再確認
+- 対象 `auctions` 行を `status = 'finalizing'` 条件で `FOR UPDATE`（満たさなければ二重実行として中断）
+- 候補 bidder の `wallets` 行を、bid 金額降順で 1 候補ずつ `FOR UPDATE`
+- winner が決まった時点で seller / dealer の `wallets` 行も `FOR UPDATE`
+- 複数 auction を並行して確定する場合に備え、wallet のロック順序は `user_id` 昇順など一定の順序に固定し、デッドロックを避ける
+
+
 
 ### 6.4 チャレンジ / ポイント付与
 
-| RPC | 責務 |
-| --- | --- |
-| `submit_challenge(group_id, challenge_id, evidence_path)` | 所属・cooldown・上限を確認して attempt 作成 |
-| `approve_challenge(attempt_id, decision)` | 自己承認不可、承認数集計、必要数到達時に wallet credit |
-| `create_group_challenge(group_id, ...)` | admin による group 独自 challenge 作成 |
+
+| RPC                                                       | 責務                                 |
+| --------------------------------------------------------- | ---------------------------------- |
+| `submit_challenge(group_id, challenge_id, evidence_path)` | 所属・cooldown・上限を確認して attempt 作成     |
+| `approve_challenge(attempt_id, decision)`                 | 自己承認不可、承認数集計、必要数到達時に wallet credit |
+| `create_group_challenge(group_id, ...)`                   | admin による group 独自 challenge 作成    |
+
+
+
 
 ### 6.5 wallet 内部関数
 
 外部公開しない内部 helper。
 
-| Function | 責務 |
-| --- | --- |
-| `_credit_wallet(group_id, user_id, amount, kind, ref_table, ref_id)` | wallet 加算と ledger 追加 |
+
+| Function                                                                            | 責務                   |
+| ----------------------------------------------------------------------------------- | -------------------- |
+| `_credit_wallet(group_id, user_id, amount, kind, ref_table, ref_id)`                | wallet 加算と ledger 追加 |
 | `_debit_wallet(group_id, user_id, amount, kind, ref_table, ref_id, allow_negative)` | wallet 減算と ledger 追加 |
+
 
 入札時は `_debit_wallet` を呼ばない。落札確定時だけ winner を debit する。
 
 ---
 
+
+
 ## 7. RLS 方針
+
+
 
 ### 7.1 共通 helper
 
@@ -769,26 +888,32 @@ is_group_admin(target_group_id uuid) returns boolean
 - `group_members.user_id = auth.uid()`
 - `group_members.status = 'active'`
 
+
+
 ### 7.2 テーブル別ポリシー概要
 
-| テーブル | select | insert / update / delete |
-| --- | --- | --- |
-| `profiles` | 本人 + 同 group member の表示情報 | 本人のみ update |
-| `groups` | active member | admin RPC |
-| `group_members` | 同 group member | admin / leave RPC |
-| `group_invites` | admin | admin RPC |
-| `wallets` | 本人のみ | wallet RPC |
-| `wallet_ledger` | 本人のみ | wallet RPC |
-| `secrets` | owner / access holder | owner の出品前 RPC |
-| `secret_group_items` | 同 group member の metadata | seller RPC |
-| `auctions` | 同 group member | auction RPC |
-| `bids` | bidder / seller。その他は匿名 view | `place_bid` RPC |
-| `secret_accesses` | 本人 | `finalize_auction` RPC |
-| `challenges` | 同 group member + system | admin / challenge RPC |
-| `challenge_attempts` | 同 group member | challenge RPC |
-| `challenge_approvals` | 同 group member | `approve_challenge` RPC |
+
+| テーブル                  | select                      | insert / update / delete |
+| --------------------- | --------------------------- | ------------------------ |
+| `profiles`            | 本人 + 同 group member の表示情報   | 本人のみ update              |
+| `groups`              | active member               | admin RPC                |
+| `group_members`       | 同 group member              | admin / leave RPC        |
+| `group_invites`       | admin                       | admin RPC                |
+| `wallets`             | 本人のみ                        | wallet RPC               |
+| `wallet_ledger`       | 本人のみ                        | wallet RPC               |
+| `secrets`             | owner / access holder       | owner の出品前 RPC           |
+| `secret_group_items`  | 同 group member の metadata   | seller RPC               |
+| `auctions`            | 同 group member              | auction RPC              |
+| `bids`                | bidder / seller。その他は匿名 view | `place_bid` RPC          |
+| `secret_accesses`     | 本人                          | `finalize_auction` RPC   |
+| `challenges`          | 同 group member + system     | admin / challenge RPC    |
+| `challenge_attempts`  | 同 group member              | challenge RPC            |
+| `challenge_approvals` | 同 group member              | `approve_challenge` RPC  |
+
 
 ---
+
+
 
 ## 8. インデックス
 
@@ -823,18 +948,22 @@ challenge_approvals(attempt_id, approver_id)
 
 ---
 
+
+
 ## 9. Realtime 方針
 
 Realtime は table を直接購読してもよいが、購読対象は group_id で必ず絞る。
 
 MVP 購読候補:
 
-| 対象 | 用途 |
-| --- | --- |
-| `auctions` | status / current_price / ends_at の更新 |
-| `bids` | bid_count / 最新価格の反映。ただし raw bidder_id を公開しない |
-| `challenge_attempts` | 承認進捗 |
-| `group_members` | メンバー変動 |
+
+| 対象                   | 用途                                           |
+| -------------------- | -------------------------------------------- |
+| `auctions`           | status / current_price / ends_at の更新         |
+| `bids`               | bid_count / 最新価格の反映。ただし raw bidder_id を公開しない |
+| `challenge_attempts` | 承認進捗                                         |
+| `group_members`      | メンバー変動                                       |
+
 
 注意:
 
@@ -843,7 +972,11 @@ MVP 購読候補:
 
 ---
 
+
+
 ## 10. トランザクション設計
+
+
 
 ### 10.1 入札
 
@@ -865,27 +998,55 @@ wallet は減らさない。落札確定時だけ debit する。
 
 ### 10.2 落札確定
 
+`finalize_auction` は 2 段階に分ける。ends_at 到達直後に `finalizing` へ状態遷移させることで、cron の重複起動を防ぎつつ、クライアントには「入札締切・確定処理中」を表示できるようにする。
+
+**Stage A: 締切クレーム（`claim_auction_for_finalize`。軽量・単独トランザクション）**
+
 ```text
-finalize_auction
-  1. auction を FOR UPDATE
-  2. status / ends_at を確認
-  3. 最高 bid を決定
-  4. bid がなければ no_sale 処理
-  5. bid があれば winner / seller / dealer wallet を FOR UPDATE
-  6. winner から final_price debit
-  7. seller / dealer へ按分 credit
-  8. secret_accesses insert
-  9. secret_group_items.status = sold
- 10. auctions.status = sold
+claim_auction_for_finalize
+  1. auction を status = 'open' AND ends_at <= now() 条件で FOR UPDATE
+  2. 条件を満たさなければ何もせず終了（他プロセスが既にクレーム済み）
+  3. auctions.status = 'finalizing' に更新して commit
 ```
 
-winner の残高が入札後に別操作で不足している場合の扱いは未決。安全側では finalize 時にも `balance >= final_price` を要求し、失敗時の運用を P11 と合わせて決める。
+**Stage B: 按分・確定本処理（`finalize_auction`。Stage A とは別トランザクション）**
+
+```text
+finalize_auction
+  1. auction を status = 'finalizing' 条件で FOR UPDATE
+     条件を満たさなければ二重実行とみなし中断
+  2. bids を amount desc, created_at asc の順で候補として取得
+     （status = 'valid' のみ。次点繰り上げの詳細は §10.2.1）
+  3. 候補が 0 件なら no_sale 処理（§10.3）へ
+  4. 候補を先頭から順に評価する
+     4a. 候補 bidder の wallet を FOR UPDATE
+     4b. balance >= 候補 bid.amount なら、この候補を winner として確定し 5. へ
+     4c. 満たさなければこの bid を status = 'failed' にし、次の候補へ（4. を繰り返す）
+     4d. 候補を使い切っても winner が決まらなければ no_sale 処理（§10.3）へ
+  5. winner bid を status = 'winning' に更新。final_price = winner bid.amount
+  6. seller / dealer wallet を FOR UPDATE
+  7. winner から final_price debit
+  8. seller / dealer へ按分 credit
+  9. secret_accesses insert
+ 10. secret_group_items.status = sold
+ 11. auctions.status = sold、winner_id / winning_bid_id / final_price を確定
+```
+
+#### 10.2.1 次点繰り上げ（winner 残高不足時）
+
+- 確定時点で最高額の入札者の残高が不足している場合、その bid は `failed` にして無効化し、次に高い有効な bid の入札者へ順に繰り上げる（DB-2 の解決方針）。
+- 繰り上げられた入札者が支払うのは**自分自身の入札額**（トップ入札者の額ではない）。`final_price` も繰り上げられた bid の `amount` に従う。
+- 入札時点（`place_bid`）でも `balance >= amount` を確認済みだが、他の auction の確定や不落札没収など、入札後の残高変動により確定時点で不足し得るため、この探索が必要になる。
+- 候補を全て使い切って誰も支払えない場合は no_sale として扱う（§10.3）。
+- seller / dealer への按分・入札者以外への開示ルールは、通常の落札確定と同一。誰が繰り上げで落札したかを他の入札者に開示するかどうかは、通常の入札可視性ルール（出品者のみ入札者を識別可能）に従う。
 
 ### 10.3 不落札
 
+`finalize_auction` の Stage B（候補が 0 件、または全候補が残高不足）から続けて実行する。auction 行のロックは Stage B から引き継ぐため、改めて取得し直さない。
+
 ```text
 no_sale
-  1. auction を FOR UPDATE
+  1. （auction 行のロックは finalize_auction Stage B から継続）
   2. seller wallet を FOR UPDATE
   3. listing_prepay_amount を没収 debit
   4. 残高不足でも allow_negative = true
@@ -895,6 +1056,8 @@ no_sale
 ```
 
 ---
+
+
 
 ## 11. セキュリティ / プライバシー
 
@@ -908,6 +1071,8 @@ no_sale
 - invite code は hash 保存し、平文は発行時のみ表示する
 
 ---
+
+
 
 ## 12. Migration 実装順
 
@@ -925,36 +1090,48 @@ no_sale
 
 ---
 
+
+
 ## 13. テスト観点
 
 危険領域を優先する。
 
-| 観点 | 最低確認 |
-| --- | --- |
-| グループ分離 | A group user が B group wallet / secret / auction を読めない |
-| wallet | 直接 update 不可。RPC では ledger と balance が一致 |
-| 入札 | 自出品不可、dealer 不可、残高不足不可、現在価格以下不可 |
-| エスクローなし | bid insert だけでは balance が減らない |
-| 落札確定 | winner debit、seller/dealer credit、access grant が同一 TX |
-| 不落札 | prepay 没収でマイナス残高になり得る |
-| 秘密本文 | 落札前に owner 以外が読めない。落札後は winner が読める |
-| チャレンジ | 自己承認不可、必要承認数到達時に一度だけ付与 |
+
+| 観点      | 最低確認                                                   |
+| ------- | ------------------------------------------------------ |
+| グループ分離  | A group user が B group wallet / secret / auction を読めない |
+| wallet  | 直接 update 不可。RPC では ledger と balance が一致               |
+| 入札      | 自出品不可、dealer 不可、残高不足不可、現在価格以下不可                        |
+| エスクローなし | bid insert だけでは balance が減らない                          |
+| 落札確定    | winner debit、seller/dealer credit、access grant が Stage B の同一 TX |
+| 次点繰り上げ  | トップ入札者の残高不足時、その bid が `failed` になり次点が `winning` になる。繰り上げ後の `final_price` は繰り上げ者自身の入札額 |
+| 二重確定防止  | `claim_auction_for_finalize` の重複起動、および Stage A/B 間で同一 auction が二重に `finalize_auction` されないこと |
+| 不落札     | prepay 没収でマイナス残高になり得る。候補全滅（全員残高不足）でも no_sale になる               |
+| 秘密本文    | 落札前に owner 以外が読めない。落札後は winner が読める                    |
+| チャレンジ   | 自己承認不可、必要承認数到達時に一度だけ付与                                 |
+
 
 ---
+
+
 
 ## 14. 未確定 / 要確認
 
-| ID | 内容 | 影響 |
-| --- | --- | --- |
-| DB-1 | P1-P7, P9-P12 の具体値 | settings / finalize / dealer decline |
-| DB-2 | finalize 時に winner 残高不足になった場合の扱い | 入札後の残高変動との整合 |
-| DB-3 | ディーラーに入札者を見せるか | `bids` RLS / dealer view |
-| DB-4 | AI validation を MVP で使うか | `validation_status` と Edge Function |
-| DB-5 | チャレンジ内容の粒度 | `challenges` の追加カラム |
-| DB-6 | wallet 残高を他メンバーに公開する UI があるか | `wallets` RLS / ranking view |
-| DB-7 | コメント / リアクションを MVP に入れるか | secret viewer 周辺テーブル |
+
+| ID   | 内容                               | 影響                                   |
+| ---- | -------------------------------- | ------------------------------------ |
+| DB-1 | P1-P7, P9-P12 の具体値               | settings / finalize / dealer decline |
+| ~~DB-2~~ | ~~finalize 時に winner 残高不足になった場合の扱い~~ → **解決済み**。次点繰り上げ方式を採用（§10.2.1） | 入札後の残高変動との整合                         |
+| DB-3 | ディーラーに入札者を見せるか                   | `bids` RLS / dealer view             |
+| DB-4 | AI validation を MVP で使うか         | `validation_status` と Edge Function  |
+| DB-5 | チャレンジ内容の粒度                       | `challenges` の追加カラム                  |
+| DB-6 | wallet 残高を他メンバーに公開する UI があるか     | `wallets` RLS / ranking view         |
+| DB-7 | コメント / リアクションを MVP に入れるか         | secret viewer 周辺テーブル                 |
+
 
 ---
+
+
 
 ## 15. 実装しないもの
 
