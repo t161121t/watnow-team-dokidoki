@@ -639,7 +639,7 @@ RLS:
 
 ### 4.16 `challenge_approvals`
 
-複数人承認の記録。
+複数人承認の記録。　
 
 
 | カラム           | 型                   | 制約 / 用途                              |
@@ -816,14 +816,14 @@ RLS / view 条件:
 ### 6.3 オークション / 入札
 
 
-| RPC                             | 責務                                                      |
-| ------------------------------- | ------------------------------------------------------- |
-| `open_due_auctions()`           | `scheduled` かつ `starts_at <= now()` を `open` にする        |
-| `place_bid(auction_id, amount)` | 所属・状態・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新 |
-| `claim_auction_for_finalize(auction_id)` | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照） |
-| `finalize_auction(auction_id)`  | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit、閲覧権付与、status 更新（Stage B） |
-| `finalize_due_auctions()`       | cron 用。`claim_auction_for_finalize` → `finalize_auction` を終了済み open auction にまとめて適用          |
-| `decline_dealer(auction_id)`    | 辞退料 debit、dealer_declines 追加、dealer 再選抜                 |
+| RPC                                      | 責務                                                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `open_due_auctions()`                    | `scheduled` かつ `starts_at <= now()` を `open` にする                                                             |
+| `place_bid(auction_id, amount)`          | 所属・状態・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新                                                      |
+| `claim_auction_for_finalize(auction_id)` | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照）                                |
+| `finalize_auction(auction_id)`           | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit、閲覧権付与、status 更新（Stage B） |
+| `finalize_due_auctions()`                | cron 用。`claim_auction_for_finalize` → `finalize_auction` を終了済み open auction にまとめて適用                          |
+| `decline_dealer(auction_id)`             | 辞退料 debit、dealer_declines 追加、dealer 再選抜                                                                      |
 
 
 `claim_auction_for_finalize` の必須 lock:
@@ -1000,7 +1000,7 @@ wallet は減らさない。落札確定時だけ debit する。
 
 `finalize_auction` は 2 段階に分ける。ends_at 到達直後に `finalizing` へ状態遷移させることで、cron の重複起動を防ぎつつ、クライアントには「入札締切・確定処理中」を表示できるようにする。
 
-**Stage A: 締切クレーム（`claim_auction_for_finalize`。軽量・単独トランザクション）**
+**Stage A: 締切クレーム（**`claim_auction_for_finalize`**。軽量・単独トランザクション）**
 
 ```text
 claim_auction_for_finalize
@@ -1009,7 +1009,7 @@ claim_auction_for_finalize
   3. auctions.status = 'finalizing' に更新して commit
 ```
 
-**Stage B: 按分・確定本処理（`finalize_auction`。Stage A とは別トランザクション）**
+**Stage B: 按分・確定本処理（**`finalize_auction`**。Stage A とは別トランザクション）**
 
 ```text
 finalize_auction
@@ -1032,6 +1032,8 @@ finalize_auction
  11. auctions.status = sold、winner_id / winning_bid_id / final_price を確定
 ```
 
+
+
 #### 10.2.1 次点繰り上げ（winner 残高不足時）
 
 - 確定時点で最高額の入札者の残高が不足している場合、その bid は `failed` にして無効化し、次に高い有効な bid の入札者へ順に繰り上げる（DB-2 の解決方針）。
@@ -1039,6 +1041,8 @@ finalize_auction
 - 入札時点（`place_bid`）でも `balance >= amount` を確認済みだが、他の auction の確定や不落札没収など、入札後の残高変動により確定時点で不足し得るため、この探索が必要になる。
 - 候補を全て使い切って誰も支払えない場合は no_sale として扱う（§10.3）。
 - seller / dealer への按分・入札者以外への開示ルールは、通常の落札確定と同一。誰が繰り上げで落札したかを他の入札者に開示するかどうかは、通常の入札可視性ルール（出品者のみ入札者を識別可能）に従う。
+
+
 
 ### 10.3 不落札
 
@@ -1097,18 +1101,18 @@ no_sale
 危険領域を優先する。
 
 
-| 観点      | 最低確認                                                   |
-| ------- | ------------------------------------------------------ |
-| グループ分離  | A group user が B group wallet / secret / auction を読めない |
-| wallet  | 直接 update 不可。RPC では ledger と balance が一致               |
-| 入札      | 自出品不可、dealer 不可、残高不足不可、現在価格以下不可                        |
-| エスクローなし | bid insert だけでは balance が減らない                          |
-| 落札確定    | winner debit、seller/dealer credit、access grant が Stage B の同一 TX |
-| 次点繰り上げ  | トップ入札者の残高不足時、その bid が `failed` になり次点が `winning` になる。繰り上げ後の `final_price` は繰り上げ者自身の入札額 |
+| 観点      | 最低確認                                                                                         |
+| ------- | -------------------------------------------------------------------------------------------- |
+| グループ分離  | A group user が B group wallet / secret / auction を読めない                                       |
+| wallet  | 直接 update 不可。RPC では ledger と balance が一致                                                     |
+| 入札      | 自出品不可、dealer 不可、残高不足不可、現在価格以下不可                                                              |
+| エスクローなし | bid insert だけでは balance が減らない                                                                |
+| 落札確定    | winner debit、seller/dealer credit、access grant が Stage B の同一 TX                              |
+| 次点繰り上げ  | トップ入札者の残高不足時、その bid が `failed` になり次点が `winning` になる。繰り上げ後の `final_price` は繰り上げ者自身の入札額        |
 | 二重確定防止  | `claim_auction_for_finalize` の重複起動、および Stage A/B 間で同一 auction が二重に `finalize_auction` されないこと |
-| 不落札     | prepay 没収でマイナス残高になり得る。候補全滅（全員残高不足）でも no_sale になる               |
-| 秘密本文    | 落札前に owner 以外が読めない。落札後は winner が読める                    |
-| チャレンジ   | 自己承認不可、必要承認数到達時に一度だけ付与                                 |
+| 不落札     | prepay 没収でマイナス残高になり得る。候補全滅（全員残高不足）でも no_sale になる                                             |
+| 秘密本文    | 落札前に owner 以外が読めない。落札後は winner が読める                                                          |
+| チャレンジ   | 自己承認不可、必要承認数到達時に一度だけ付与                                                                       |
 
 
 ---
@@ -1118,15 +1122,15 @@ no_sale
 ## 14. 未確定 / 要確認
 
 
-| ID   | 内容                               | 影響                                   |
-| ---- | -------------------------------- | ------------------------------------ |
-| DB-1 | P1-P7, P9-P12 の具体値               | settings / finalize / dealer decline |
+| ID       | 内容                                                                   | 影響                                   |
+| -------- | -------------------------------------------------------------------- | ------------------------------------ |
+| DB-1     | P1-P7, P9-P12 の具体値                                                   | settings / finalize / dealer decline |
 | ~~DB-2~~ | ~~finalize 時に winner 残高不足になった場合の扱い~~ → **解決済み**。次点繰り上げ方式を採用（§10.2.1） | 入札後の残高変動との整合                         |
-| DB-3 | ディーラーに入札者を見せるか                   | `bids` RLS / dealer view             |
-| DB-4 | AI validation を MVP で使うか         | `validation_status` と Edge Function  |
-| DB-5 | チャレンジ内容の粒度                       | `challenges` の追加カラム                  |
-| DB-6 | wallet 残高を他メンバーに公開する UI があるか     | `wallets` RLS / ranking view         |
-| DB-7 | コメント / リアクションを MVP に入れるか         | secret viewer 周辺テーブル                 |
+| DB-3     | ディーラーに入札者を見せるか                                                       | `bids` RLS / dealer view             |
+| DB-4     | AI validation を MVP で使うか                                             | `validation_status` と Edge Function  |
+| DB-5     | チャレンジ内容の粒度                                                           | `challenges` の追加カラム                  |
+| DB-6     | wallet 残高を他メンバーに公開する UI があるか                                         | `wallets` RLS / ranking view         |
+| DB-7     | コメント / リアクションを MVP に入れるか                                             | secret viewer 周辺テーブル                 |
 
 
 ---
