@@ -35,7 +35,9 @@
 4. `docs/機能要件.md`
 5. `docs/技術選定.md`
 6. `docs/画面.md` / `docs/ユーザーフロー .md`
-7. `docs/ai-development.md`
+7. `docs/DB.md`（DB設計）
+8. `docs/アーキテクチャ.md`（アプリのディレクトリ構成・レイヤー・RLSの守り方。コードを書く前に必読）
+9. `docs/ai-development.md`
 
 ## スタック（要約）
 
@@ -54,11 +56,14 @@
 
 ## 実装の置き場所（方針）
 
-- UI / クライアント状態: Frontend（React）
-- 複数テーブルの整合・入札・ポイント: PostgreSQL Function
+- UI / クライアント状態: Frontend（React、`app/` + `features/*/components`）
+- DBアクセス（read/write・RPC呼び出し）: Prisma Client を `lib/db/rls.ts` の `withRlsContext` 経由でのみ使う（`features/*/server/*`）。直接 `@/lib/prisma` を import しない
+- 複数テーブルの整合・入札・ポイント: PostgreSQL Function（`prisma/sql/<domain>/`）
 - 外部 HTTP / Storage 連携: Edge Functions
-- アクセス制御: RLS（必須）+ Function 内チェック
+- アクセス制御: RLS（必須）+ Function 内チェック + `withRlsContext`（Prisma接続でRLSを効かせる。§実装の詳細は `docs/アーキテクチャ.md`）
 - **不変条件**: グループ完全分離（他グループデータ漏れは致命傷）
+
+具体的なディレクトリ構成・何を書いてよいか/だめかは `docs/アーキテクチャ.md` と各ディレクトリの `README.md`（`features/README.md` 等）が正。違反は `npm run lint`（ESLint boundaries）で検出される。
 
 ## Git / PR
 
@@ -90,6 +95,8 @@
 | `npm run db:migrate` | `prisma migrate dev`（マイグレーション作成・適用） |
 | `npm run db:studio` | Prisma Studio（DB の中身をブラウザで確認） |
 | `npm run db:check` | `DATABASE_URL` への疎通確認のみ実行 |
+| `npm run db:sql` | `prisma/sql/**/*.sql`（PostgreSQL Functions・RLSポリシー）を適用 |
+| `npm run db:setup` | `prisma migrate deploy` + `db:sql` をまとめて実行 |
 
 lint / typecheck（`npx tsc --noEmit`）/ build は導入済み。test は未導入。
 
