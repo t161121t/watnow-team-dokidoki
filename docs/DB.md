@@ -1,8 +1,17 @@
 # DB 設計 — 秘密オークション（仮）
 
-ステータス: 初期設計ドラフト  
+ステータス: 設計ドラフト v2（P1–P12・DB-3/4/6/7 確定を反映。2026-08-17）  
 作成日: 2026-08-16  
+更新日: 2026-08-17  
 対象: Supabase PostgreSQL / Auth / Realtime / Storage  
+
+v2 での主な変更点:
+
+- P1 確定に伴い、オークション開始を「固定待機時間」から「ディーラー承認によるイベント駆動」に変更（§3 `auction_status`、§4.10、§6.2、§6.3、§10 を変更）
+- P9 確定（ディーラーへの入札者開示）に伴い、`seller_bid_view` をディーラーも見られるよう変更（§5.2）
+- DB-4 確定（AI validation は MVP 対象外）に伴い、`validation_status` 関連カラム・enum を削除（§3、§4.9、§15）
+- DB-6 / DB-7 確定（残高公開・コメント/リアクションは作らない）を §15 に明記
+- P2–P7・P11・P12 の確定値を `group_auction_settings` の既定値・各種計算ロジックに反映
 
 ---
 
@@ -79,11 +88,11 @@ MVP では選択中グループに 1 件だけ作ればよい。Phase 2 の「�
 
 ```text
 auth.users
-  1 ─ 1 profiles
+  1 ─ 1 users
   1 ─ * group_members * ─ 1 groups
   1 ─ * wallets       * ─ 1 groups
 
-profiles
+users
   1 ─ * secrets
 
 secrets
@@ -120,13 +129,20 @@ wallets
 | `member_role`        | `member`, `admin`                                                                                                                                                    |
 | `member_status`      | `active`, `left`, `kicked`                                                                                                                                           |
 | `secret_item_status` | `registered`, `listed`, `on_auction`, `sold`, `returned`, `withdrawn`                                                                                                |
-| `auction_status`     | `scheduled`, `open`, `finalizing`, `sold`, `no_sale`, `canceled`                                                                                                     |
+| `auction_status`     | `pending_dealer_approval`, `open`, `finalizing`, `sold`, `no_sale`, `canceled`                                                                                       |
 | `bid_status`         | `valid`, `superseded`, `winning`, `canceled`, `failed`                                                                                                               |
 | `wallet_tx_kind`     | `challenge_reward`, `listing_prepay`, `listing_reclaim`, `winning_bid_debit`, `seller_share_credit`, `dealer_share_credit`, `dealer_decline_fee`, `admin_adjustment` |
 | `challenge_status`   | `active`, `archived`                                                                                                                                                 |
 | `attempt_status`     | `pending`, `approved`, `rejected`, `awarded`, `canceled`                                                                                                             |
 | `approval_decision`  | `approved`, `rejected`                                                                                                                                               |
-| `validation_status`  | `not_required`, `pending`, `passed`, `failed`, `skipped`                                                                                                             |
+
+`validation_status`（AI validation 用）は DB-4 確定（MVP 対象外）により削除。Phase 2 で AI validation を実装する際に再定義する（§15 参照）。
+
+`auction_status` 補足（P1 確定に伴う変更）:
+
+- `scheduled` を廃止し `pending_dealer_approval` に変更。固定の開始時刻を待つのではなく、ランダム選抜されたディーラーの承認を待つ状態を表す
+- `pending_dealer_approval` → `open`: ディーラー承認時（`approve_dealer_assignment` RPC、§6.3）
+- `pending_dealer_approval` のまま: ディーラー辞退時は同じ auction 行の `dealer_id` を再割当し、`pending_dealer_approval` を維持する（§4.13、§6.3）
 
 
 ---
@@ -137,9 +153,9 @@ wallets
 
 
 
-### 4.1 `profiles`
+### 4.1 `users`（旧 `profiles`。2026-08-17 リネーム）
 
-Supabase Auth のユーザーに紐づく表示用プロフィール。
+Supabase Auth のユーザーに紐づく表示用プロフィール。`public.users` として作成する（Supabase 標準の `auth.users` とはスキーマが異なる別テーブル。`id` で 1:1 対応）。
 
 
 | カラム           | 型             | 制約 / 用途               |
@@ -171,7 +187,7 @@ RLS:
 | `id`          | `uuid`        | PK               |
 | `name`        | `text`        | not null         |
 | `icon_path`   | `text`        | nullable         |
-| `created_by`  | `uuid`        | FK `profiles.id` |
+| `created_by`  | `uuid`        | FK `users.id` |
 | `created_at`  | `timestamptz` | not null         |
 | `updated_at`  | `timestamptz` | not null         |
 | `archived_at` | `timestamptz` | nullable         |
@@ -195,7 +211,7 @@ RLS:
 | カラム         | 型               | 制約 / 用途                    |
 | ----------- | --------------- | -------------------------- |
 | `group_id`  | `uuid`          | PK part / FK `groups.id`   |
-| `user_id`   | `uuid`          | PK part / FK `profiles.id` |
+| `user_id`   | `uuid`          | PK part / FK `users.id` |
 | `role`      | `member_role`   | not null                   |
 | `status`    | `member_status` | not null default `active`  |
 | `joined_at` | `timestamptz`   | not null                   |
@@ -227,7 +243,7 @@ RLS:
 | `id`         | `uuid`        | PK                 |
 | `group_id`   | `uuid`        | FK `groups.id`     |
 | `code_hash`  | `text`        | unique。平文コードは保存しない |
-| `created_by` | `uuid`        | FK `profiles.id`   |
+| `created_by` | `uuid`        | FK `users.id`   |
 | `expires_at` | `timestamptz` | nullable           |
 | `max_uses`   | `int`         | nullable           |
 | `used_count` | `int`         | not null default 0 |
@@ -246,35 +262,35 @@ RLS:
 
 ### 4.5 `group_auction_settings`
 
-オークション未確定パラメータ P1-P12 の置き場。未確定値は null 許容にし、実装時に確定した値から not null 化を検討する。
+P1–P12（2026-08-17 確定）の実値の置き場。グループ作成時に既定値で 1 行作成し、幹事が変更できるものは変更を許可する。P1 はイベント駆動になったため `listing_wait_seconds` は廃止（§3 `auction_status` 参照）。
 
 
-| カラム                         | 型             | 対応                  |
-| --------------------------- | ------------- | ------------------- |
-| `group_id`                  | `uuid`        | PK / FK `groups.id` |
-| `listing_wait_seconds`      | `int`         | P1                  |
-| `auction_open_seconds`      | `int`         | P2                  |
-| `start_price_add`           | `int`         | P3                  |
-| `start_price_multiplier`    | `numeric`     | P3                  |
-| `listing_prepay_rate`       | `numeric`     | P4                  |
-| `listing_prepay_fixed`      | `int`         | P4                  |
-| `seller_bonus_rate`         | `numeric`     | P5                  |
-| `no_sale_depreciation_rate` | `numeric`     | P6                  |
-| `dealer_share_rate`         | `numeric`     | P7                  |
-| `seller_share_rate`         | `numeric`     | P7                  |
-| `dealer_can_see_bidders`    | `boolean`     | P9                  |
-| `min_balance_limit`         | `int`         | P11                 |
-| `dealer_decline_fee_fixed`  | `int`         | P12                 |
-| `dealer_decline_fee_rate`   | `numeric`     | P12                 |
-| `updated_by`                | `uuid`        | FK `profiles.id`    |
-| `updated_at`                | `timestamptz` | not null            |
+| カラム                         | 型             | 対応 / 既定値                       |
+| --------------------------- | ------------- | ------------------------------- |
+| `group_id`                  | `uuid`        | PK / FK `groups.id`             |
+| `auction_open_seconds`      | `int`         | P2。既定 `86400`（24時間）。幹事が変更可      |
+| `start_price_add`           | `int`         | P3。固定 `0`                       |
+| `start_price_multiplier`    | `numeric`     | P3。固定 `1`                       |
+| `listing_prepay_rate`       | `numeric`     | P4。固定 `1.0`（100%）               |
+| `listing_prepay_fixed`      | `int`         | P4。固定 `0`                       |
+| `seller_bonus_rate`         | `numeric`     | P5。固定 `0`（追加振込なし）               |
+| `no_sale_depreciation_rate` | `numeric`     | P6。固定 `0.20`                    |
+| `dealer_share_rate`         | `numeric`     | P7。固定 `0.30`                    |
+| `seller_share_rate`         | `numeric`     | P7。固定 `0.70`                    |
+| `dealer_can_see_bidders`    | `boolean`     | P9。固定 `true`                    |
+| `min_balance_limit`         | `int`         | P11。`null`（上限なし。この仕様で固定）        |
+| `dealer_decline_fee_fixed`  | `int`         | P12。固定 `0`                      |
+| `dealer_decline_fee_rate`   | `numeric`     | P12。固定 `0.05`（出品価格の5%、完全没収）     |
+| `updated_by`                | `uuid`        | FK `users.id`                |
+| `updated_at`                | `timestamptz` | not null                        |
 
 
 補足:
 
 - P8 は PRD で「自出品への入札不可」が確定しているため設定化しない
-- `dealer_share_rate + seller_share_rate = 1` は、両方 not null になった段階で check する
-- MVP で未確定パラメータを固定値運用する場合も、将来の変更履歴のためこのテーブルに保存する
+- 「固定」と記載した値も本テーブルのカラムとして持つ（将来グループごとに変えたくなった場合の変更コストを抑えるため）。ただし MVP の UI では `auction_open_seconds` 以外は編集不可にする
+- `dealer_share_rate + seller_share_rate = 1` を check constraint で保証する
+- `min_balance_limit` が `null` の場合、`place_bid` は残高不足チェック（`balance >= amount`）のみ行い、確定済みの借金には上限を課さない
 
 ---
 
@@ -288,7 +304,7 @@ RLS:
 | カラム          | 型             | 制約 / 用途                    |
 | ------------ | ------------- | -------------------------- |
 | `group_id`   | `uuid`        | PK part / FK `groups.id`   |
-| `user_id`    | `uuid`        | PK part / FK `profiles.id` |
+| `user_id`    | `uuid`        | PK part / FK `users.id` |
 | `balance`    | `int`         | not null。マイナス可             |
 | `created_at` | `timestamptz` | not null                   |
 | `updated_at` | `timestamptz` | not null                   |
@@ -320,7 +336,7 @@ RLS:
 | --------------- | ---------------- | ----------------------- |
 | `id`            | `uuid`           | PK                      |
 | `group_id`      | `uuid`           | FK `groups.id`          |
-| `user_id`       | `uuid`           | FK `profiles.id`        |
+| `user_id`       | `uuid`           | FK `users.id`        |
 | `amount`        | `int`            | not null。増加は正、減少は負      |
 | `balance_after` | `int`            | not null                |
 | `kind`          | `wallet_tx_kind` | not null                |
@@ -353,7 +369,7 @@ RLS:
 | カラム          | 型             | 制約 / 用途                                    |
 | ------------ | ------------- | ------------------------------------------ |
 | `id`         | `uuid`        | PK                                         |
-| `owner_id`   | `uuid`        | FK `profiles.id`                           |
+| `owner_id`   | `uuid`        | FK `users.id`                           |
 | `body`       | `text`        | 秘密本文。落札まで秘匿                                |
 | `summary`    | `text`        | ディーラー・一覧用の概要。本文を直接含めすぎない                   |
 | `category`   | `text`        | 恋愛 / 黒歴史 / 趣味 / 特技など。初期は text、安定後 lookup 化 |
@@ -388,15 +404,14 @@ RLS:
 | `id`                | `uuid`               | PK                                      |
 | `secret_id`         | `uuid`               | FK `secrets.id`                         |
 | `group_id`          | `uuid`               | FK `groups.id`                          |
-| `seller_id`         | `uuid`               | FK `profiles.id`。基本は `secrets.owner_id` |
+| `seller_id`         | `uuid`               | FK `users.id`。基本は `secrets.owner_id` |
 | `status`            | `secret_item_status` | not null                                |
 | `asking_price`      | `int`                | 出品者の自己設定価格                              |
 | `current_value`     | `int`                | 不落札目減り後の価値                              |
-| `validation_status` | `validation_status`  | AI validation の状態                       |
-| `validation_note`   | `text`               | nullable                                |
 | `created_at`        | `timestamptz`        | not null                                |
 | `updated_at`        | `timestamptz`        | not null                                |
 
+DB-4 確定（AI validation は MVP 対象外）のため `validation_status` / `validation_note` は持たない。Phase 2 で AI validation を実装する際にカラム追加のマイグレーションを行う。
 
 制約:
 
@@ -419,35 +434,39 @@ RLS:
 
 出品実施から競り終了までを表す。1 つの `secret_group_items` は、返却後の再出品により複数 auction を持ち得る。
 
+P1 確定（ディーラー承認によるイベント駆動）により、`starts_at` / `ends_at` は**行作成時点では未確定**（承認されるまで auction は開始しないため）。承認時に `approve_dealer_assignment` RPC が確定させる（§6.3、§10）。
 
-| カラム                           | 型                | 制約 / 用途                    |
-| ----------------------------- | ---------------- | -------------------------- |
-| `id`                          | `uuid`           | PK                         |
-| `group_id`                    | `uuid`           | FK `groups.id`             |
-| `secret_group_item_id`        | `uuid`           | FK `secret_group_items.id` |
-| `seller_id`                   | `uuid`           | FK `profiles.id`           |
-| `dealer_id`                   | `uuid`           | FK `profiles.id`           |
-| `status`                      | `auction_status` | not null                   |
-| `starting_price`              | `int`            | not null                   |
-| `current_price`               | `int`            | not null                   |
-| `starts_at`                   | `timestamptz`    | not null                   |
-| `ends_at`                     | `timestamptz`    | not null                   |
-| `winner_id`                   | `uuid`           | nullable                   |
-| `winning_bid_id`              | `uuid`           | nullable                   |
-| `final_price`                 | `int`            | nullable                   |
-| `listing_prepay_amount`       | `int`            | P4 の実値                     |
-| `seller_share_amount`         | `int`            | 確定時に保存                     |
-| `dealer_share_amount`         | `int`            | 確定時に保存                     |
-| `no_sale_depreciation_amount` | `int`            | 不落札時に保存                    |
-| `created_at`                  | `timestamptz`    | not null                   |
-| `updated_at`                  | `timestamptz`    | not null                   |
-| `finalized_at`                | `timestamptz`    | nullable                   |
+
+| カラム                           | 型                | 制約 / 用途                                             |
+| ----------------------------- | ---------------- | ---------------------------------------------------- |
+| `id`                          | `uuid`           | PK                                                    |
+| `group_id`                    | `uuid`           | FK `groups.id`                                        |
+| `secret_group_item_id`        | `uuid`           | FK `secret_group_items.id`                            |
+| `seller_id`                   | `uuid`           | FK `users.id`                                      |
+| `dealer_id`                   | `uuid`           | FK `users.id`。辞退のたびに再割当で更新される（履歴は `dealer_declines`） |
+| `status`                      | `auction_status` | not null。既定 `pending_dealer_approval`                 |
+| `starting_price`              | `int`            | not null                                              |
+| `current_price`               | `int`            | not null                                              |
+| `dealer_approved_at`          | `timestamptz`    | nullable。承認時刻                                        |
+| `starts_at`                   | `timestamptz`    | nullable。承認時に確定（`= dealer_approved_at`）                |
+| `ends_at`                     | `timestamptz`    | nullable。承認時に確定（`= starts_at + auction_open_seconds`） |
+| `winner_id`                   | `uuid`           | nullable                                              |
+| `winning_bid_id`              | `uuid`           | nullable                                              |
+| `final_price`                 | `int`            | nullable                                              |
+| `listing_prepay_amount`       | `int`            | P4 の実値（= `starting_price`。出品確定時に確定）                    |
+| `seller_share_amount`         | `int`            | 確定時に保存                                                |
+| `dealer_share_amount`         | `int`            | 確定時に保存                                                |
+| `no_sale_depreciation_amount` | `int`            | 不落札時に保存                                               |
+| `created_at`                  | `timestamptz`    | not null                                              |
+| `updated_at`                  | `timestamptz`    | not null                                              |
+| `finalized_at`                | `timestamptz`    | nullable                                              |
 
 
 制約:
 
 - `seller_id <> dealer_id`
-- `starts_at < ends_at`
+- `starts_at < ends_at`（両方 not null の場合のみ。`pending_dealer_approval` の間は両方 null）
+- `status = 'pending_dealer_approval'` の間は `starts_at` / `ends_at` は null、`open` 以降は両方 not null（check constraint）
 - `starting_price >= 0`
 - `current_price >= starting_price`
 - `dealer_id` は同 group の active member
@@ -458,7 +477,7 @@ RLS:
 
 - group member は一覧・詳細 metadata を select 可
 - 本文は見せない
-- seller は自分の auction の入札者識別情報を view 経由で見られる
+- seller / dealer は自分が関与する auction の入札者識別情報を `bidder_identified_view` 経由で見られる（P9 確定）
 - dealer は本文を見られず、概要のみ見られる
 - insert / update は RPC のみ
 
@@ -476,7 +495,7 @@ RLS:
 | `id`         | `uuid`        | PK                       |
 | `group_id`   | `uuid`        | FK `groups.id`           |
 | `auction_id` | `uuid`        | FK `auctions.id`         |
-| `bidder_id`  | `uuid`        | FK `profiles.id`         |
+| `bidder_id`  | `uuid`        | FK `users.id`         |
 | `amount`     | `int`         | not null                 |
 | `status`     | `bid_status`  | not null default `valid` |
 | `created_at` | `timestamptz` | not null                 |
@@ -503,9 +522,8 @@ RLS:
 
 - direct insert は禁止。`place_bid` RPC のみ
 - bidder は自分の bid を select 可
-- seller は自分の auction の bid を bidder 識別付きで select 可
-- その他 group member は匿名化 view のみ
-- dealer への bidder 開示は P9 確定まで direct select させない
+- seller / dealer は自分が関与する auction の bid を bidder 識別付きで select 可（P9 確定。`bidder_identified_view`、§5.2）
+- その他 group member（出品者・ディーラー以外）は匿名化 view のみ（`anonymous_bid_feed_view`、§5.3）
 
 ---
 
@@ -523,7 +541,7 @@ RLS:
 | `secret_id`            | `uuid`        | FK `secrets.id`            |
 | `secret_group_item_id` | `uuid`        | FK `secret_group_items.id` |
 | `auction_id`           | `uuid`        | FK `auctions.id`           |
-| `user_id`              | `uuid`        | FK `profiles.id`           |
+| `user_id`              | `uuid`        | FK `users.id`           |
 | `granted_at`           | `timestamptz` | not null                   |
 
 
@@ -544,19 +562,21 @@ RLS:
 
 ### 4.13 `dealer_declines`
 
-ディーラー辞退履歴。P12 が確定するまで実値は nullable を許容する。
+ディーラー辞退履歴。P12 確定（出品価格の 5%・完全没収・開始前のみ辞退可）に伴い実値が決まった。`decline_dealer` は `auctions.status = 'pending_dealer_approval'` の場合のみ許可し、`open` 以降は拒否する。
 
 
-| カラム                | 型             | 制約 / 用途               |
-| ------------------ | ------------- | --------------------- |
-| `id`               | `uuid`        | PK                    |
-| `group_id`         | `uuid`        | FK `groups.id`        |
-| `auction_id`       | `uuid`        | FK `auctions.id`      |
-| `dealer_id`        | `uuid`        | FK `profiles.id`      |
-| `fee_amount`       | `int`         | 辞退料                   |
-| `wallet_ledger_id` | `uuid`        | FK `wallet_ledger.id` |
-| `created_at`       | `timestamptz` | not null              |
+| カラム                | 型             | 制約 / 用途                                    |
+| ------------------ | ------------- | ------------------------------------------- |
+| `id`               | `uuid`        | PK                                           |
+| `group_id`         | `uuid`        | FK `groups.id`                               |
+| `auction_id`       | `uuid`        | FK `auctions.id`                             |
+| `dealer_id`        | `uuid`        | FK `users.id`                             |
+| `fee_amount`       | `int`         | 辞退料。`secret_group_items.asking_price * 0.05` |
+| `wallet_ledger_id` | `uuid`        | FK `wallet_ledger.id`                        |
+| `created_at`       | `timestamptz` | not null                                     |
 
+
+辞退料はグループへの還元やプールを行わず、`wallet_ledger` 上は `dealer_decline_fee` として debit するのみ（完全没収。credit 側の行は作らない）。再割当の回数上限はなし。
 
 RLS:
 
@@ -613,7 +633,7 @@ RLS:
 | `id`                | `uuid`           | PK                    |
 | `group_id`          | `uuid`           | FK `groups.id`        |
 | `challenge_id`      | `uuid`           | FK `challenges.id`    |
-| `user_id`           | `uuid`           | FK `profiles.id`      |
+| `user_id`           | `uuid`           | FK `users.id`      |
 | `status`            | `attempt_status` | not null              |
 | `evidence_path`     | `text`           | Storage path          |
 | `reward_points`     | `int`            | 承認時点の実値を保存            |
@@ -645,7 +665,7 @@ RLS:
 | カラム           | 型                   | 制約 / 用途                              |
 | ------------- | ------------------- | ------------------------------------ |
 | `attempt_id`  | `uuid`              | PK part / FK `challenge_attempts.id` |
-| `approver_id` | `uuid`              | PK part / FK `profiles.id`           |
+| `approver_id` | `uuid`              | PK part / FK `users.id`           |
 | `decision`    | `approval_decision` | not null                             |
 | `created_at`  | `timestamptz`       | not null                             |
 
@@ -719,9 +739,9 @@ Storage bucket 案:
 
 
 
-### 5.2 `seller_bid_view`
+### 5.2 `bidder_identified_view`（旧 `seller_bid_view`。P9 確定によりディーラーも対象に）
 
-出品者向け。自分の auction の入札者を識別可能にする。
+出品者・ディーラー向け。自分が関与する auction の入札者を識別可能にする。
 
 含める:
 
@@ -734,13 +754,13 @@ Storage bucket 案:
 
 RLS / view 条件:
 
-- `auctions.seller_id = auth.uid()`
+- `auctions.seller_id = auth.uid()` **または** `auctions.dealer_id = auth.uid()`
 
 
 
 ### 5.3 `anonymous_bid_feed_view`
 
-出品者以外の参加者向け。
+出品者・ディーラー以外の参加者向け。
 
 含める:
 
@@ -808,7 +828,7 @@ RLS / view 条件:
 | `update_secret_before_listing(secret_id, ...)`                             | 出品前のみ編集                                            |
 | `delete_secret_before_listing(secret_id)`                                  | 出品前のみ soft delete                                  |
 | `publish_secret_to_group(secret_id, group_id, asking_price)`               | Phase 2 の複数 group 公開用                              |
-| `list_secret_for_auction(secret_group_item_id)`                            | listed 化、開始時刻計算、dealer 選抜、前払い credit               |
+| `list_secret_for_auction(secret_group_item_id)`                            | listed 化、`auctions` 行作成（`status = pending_dealer_approval`、`starts_at`/`ends_at` は null）、dealer ランダム選抜、前払い credit（P4） |
 
 
 
@@ -816,14 +836,16 @@ RLS / view 条件:
 ### 6.3 オークション / 入札
 
 
-| RPC                                      | 責務                                                                                                           |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `open_due_auctions()`                    | `scheduled` かつ `starts_at <= now()` を `open` にする                                                             |
-| `place_bid(auction_id, amount)`          | 所属・状態・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新                                                      |
-| `claim_auction_for_finalize(auction_id)` | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照）                                |
-| `finalize_auction(auction_id)`           | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit、閲覧権付与、status 更新（Stage B） |
-| `finalize_due_auctions()`                | cron 用。`claim_auction_for_finalize` → `finalize_auction` を終了済み open auction にまとめて適用                          |
-| `decline_dealer(auction_id)`             | 辞退料 debit、dealer_declines 追加、dealer 再選抜                                                                      |
+| RPC                                        | 責務                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `approve_dealer_assignment(auction_id)`     | 割り当てられた dealer 本人のみ実行可。`pending_dealer_approval` → `open`。`starts_at = now()`、`ends_at = now() + group_auction_settings.auction_open_seconds` を確定（P1・P2） |
+| `place_bid(auction_id, amount)`             | 所属・状態（`open`）・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新                                                    |
+| `claim_auction_for_finalize(auction_id)`    | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照）                                |
+| `finalize_auction(auction_id)`              | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit（P7）、閲覧権付与、status 更新（Stage B） |
+| `finalize_due_auctions()`                   | cron 用。`claim_auction_for_finalize` → `finalize_auction` を終了済み open auction にまとめて適用                          |
+| `decline_dealer(auction_id)`                | 割り当てられた dealer 本人のみ、`status = pending_dealer_approval` の間だけ実行可。辞退料（出品価格の5%）debit、dealer_declines 追加、dealer 再選抜（P12）。`status` は `pending_dealer_approval` のまま |
+
+`open_due_auctions()` は P1 の仕様変更（固定待機時間の廃止）により不要になったため削除した。オークション開始はディーラーの `approve_dealer_assignment` 呼び出しのみで起こり、タイムアウト監視の cron は設けない（P1 確定：タイムアウトなし）。
 
 
 `claim_auction_for_finalize` の必須 lock:
@@ -895,7 +917,7 @@ is_group_admin(target_group_id uuid) returns boolean
 
 | テーブル                  | select                      | insert / update / delete |
 | --------------------- | --------------------------- | ------------------------ |
-| `profiles`            | 本人 + 同 group member の表示情報   | 本人のみ update              |
+| `users`            | 本人 + 同 group member の表示情報   | 本人のみ update              |
 | `groups`              | active member               | admin RPC                |
 | `group_members`       | 同 group member              | admin / leave RPC        |
 | `group_invites`       | admin                       | admin RPC                |
@@ -920,7 +942,7 @@ is_group_admin(target_group_id uuid) returns boolean
 必須候補:
 
 ```text
-profiles(id)
+users(id)
 groups(id)
 group_members(group_id, user_id)
 group_members(user_id, status)
@@ -943,7 +965,7 @@ challenge_approvals(attempt_id, approver_id)
 ```text
 1 つの secret_group_item につき同時に active auction は 1 つ
   unique(secret_group_item_id)
-  where status in ('scheduled', 'open', 'finalizing')
+  where status in ('pending_dealer_approval', 'open', 'finalizing')
 ```
 
 ---
@@ -977,6 +999,34 @@ MVP 購読候補:
 ## 10. トランザクション設計
 
 
+
+### 10.0 ディーラー承認・辞退（P1・P12）
+
+```text
+approve_dealer_assignment
+  1. auction を status = 'pending_dealer_approval' 条件で FOR UPDATE
+  2. 呼び出しユーザーが auctions.dealer_id 本人であることを確認
+  3. group_auction_settings.auction_open_seconds を取得
+  4. auctions.dealer_approved_at = now()
+  5. auctions.starts_at = now()
+  6. auctions.ends_at = now() + auction_open_seconds
+  7. auctions.status = 'open'
+```
+
+```text
+decline_dealer
+  1. auction を status = 'pending_dealer_approval' 条件で FOR UPDATE
+     （'open' 以降なら中断。開始後の辞退は不可）
+  2. 呼び出しユーザーが auctions.dealer_id 本人であることを確認
+  3. dealer wallet を FOR UPDATE
+  4. fee = secret_group_items.asking_price * dealer_decline_fee_rate（5%）を debit（allow_negative）
+  5. dealer_declines insert（fee_amount, wallet_ledger_id）
+  6. 出品者以外・現 dealer 以外の active group member からランダムに新 dealer を選抜
+  7. auctions.dealer_id を新 dealer に更新
+  8. auctions.status は 'pending_dealer_approval' のまま
+```
+
+タイムアウト監視の cron は設けない（P1 確定）。ディーラーが承認も辞退もしない限り、auction は無期限に `pending_dealer_approval` のままになる（運用上のリスクとして `PRD.md` §9 に記載）。
 
 ### 10.1 入札
 
@@ -1025,11 +1075,11 @@ finalize_auction
      4d. 候補を使い切っても winner が決まらなければ no_sale 処理（§10.3）へ
   5. winner bid を status = 'winning' に更新。final_price = winner bid.amount
   6. seller / dealer wallet を FOR UPDATE
-  7. winner から final_price debit
-  8. seller / dealer へ按分 credit
+  7. winner から final_price debit（追加振込なし。P5 確定）
+  8. seller へ final_price * 0.70、dealer へ final_price * 0.30 を credit（P7 確定）
   9. secret_accesses insert
  10. secret_group_items.status = sold
- 11. auctions.status = sold、winner_id / winning_bid_id / final_price を確定
+ 11. auctions.status = sold、winner_id / winning_bid_id / final_price / seller_share_amount / dealer_share_amount を確定
 ```
 
 
@@ -1040,7 +1090,7 @@ finalize_auction
 - 繰り上げられた入札者が支払うのは**自分自身の入札額**（トップ入札者の額ではない）。`final_price` も繰り上げられた bid の `amount` に従う。
 - 入札時点（`place_bid`）でも `balance >= amount` を確認済みだが、他の auction の確定や不落札没収など、入札後の残高変動により確定時点で不足し得るため、この探索が必要になる。
 - 候補を全て使い切って誰も支払えない場合は no_sale として扱う（§10.3）。
-- seller / dealer への按分・入札者以外への開示ルールは、通常の落札確定と同一。誰が繰り上げで落札したかを他の入札者に開示するかどうかは、通常の入札可視性ルール（出品者のみ入札者を識別可能）に従う。
+- seller / dealer への按分・入札者以外への開示ルールは、通常の落札確定と同一。誰が繰り上げで落札したかを他の入札者に開示するかどうかは、通常の入札可視性ルール（出品者・ディーラーのみ入札者を識別可能。P9 確定）に従う。
 
 
 
@@ -1052,12 +1102,14 @@ finalize_auction
 no_sale
   1. （auction 行のロックは finalize_auction Stage B から継続）
   2. seller wallet を FOR UPDATE
-  3. listing_prepay_amount を没収 debit
-  4. 残高不足でも allow_negative = true
-  5. secret_group_items.current_value を目減り
+  3. listing_prepay_amount（= P4 の実値、出品価格と同額）を全額没収 debit
+  4. 残高不足でも allow_negative = true（P11 確定。上限なし）
+  5. secret_group_items.current_value = asking_price * (1 - 0.20)（P6 確定）
   6. secret_group_items.status = returned
   7. auctions.status = no_sale
 ```
+
+前払い没収（3.）と秘密の目減り（5.）は独立した処理であり、前払いは目減り率とは無関係に**全額**没収する（`オークションルール.md` §2.2）。
 
 ---
 
@@ -1081,7 +1133,7 @@ no_sale
 ## 12. Migration 実装順
 
 1. enum / helper function
-2. profiles / groups / group_members / group_invites
+2. users / groups / group_members / group_invites
 3. wallets / wallet_ledger / wallet helper
 4. secrets / secret_group_items
 5. group_auction_settings
@@ -1113,6 +1165,9 @@ no_sale
 | 不落札     | prepay 没収でマイナス残高になり得る。候補全滅（全員残高不足）でも no_sale になる                                             |
 | 秘密本文    | 落札前に owner 以外が読めない。落札後は winner が読める                                                          |
 | チャレンジ   | 自己承認不可、必要承認数到達時に一度だけ付与                                                                       |
+| ディーラー承認 | `pending_dealer_approval` 以外では `approve_dealer_assignment` / `decline_dealer` が失敗する。dealer 本人以外は実行不可 |
+| ディーラー辞退 | 辞退のたびに `asking_price * 5%` が debit され、`dealer_id` が新しい dealer に更新される。`open` 後は辞退不可 |
+| 入札者開示   | seller・dealer は `bidder_identified_view` で bidder を識別できる。それ以外は匿名 view のみ                        |
 
 
 ---
@@ -1124,13 +1179,14 @@ no_sale
 
 | ID       | 内容                                                                   | 影響                                   |
 | -------- | -------------------------------------------------------------------- | ------------------------------------ |
-| DB-1     | P1-P7, P9-P12 の具体値                                                   | settings / finalize / dealer decline |
+| ~~DB-1~~ | ~~P1-P7, P9-P12 の具体値~~ → **解決済み（2026-08-17）**。`PRD.md` §6 / `オークションルール.md` §5 を正とし、本書に反映済み | settings / finalize / dealer decline |
 | ~~DB-2~~ | ~~finalize 時に winner 残高不足になった場合の扱い~~ → **解決済み**。次点繰り上げ方式を採用（§10.2.1） | 入札後の残高変動との整合                         |
-| DB-3     | ディーラーに入札者を見せるか                                                       | `bids` RLS / dealer view             |
-| DB-4     | AI validation を MVP で使うか                                             | `validation_status` と Edge Function  |
-| DB-5     | チャレンジ内容の粒度                                                           | `challenges` の追加カラム                  |
-| DB-6     | wallet 残高を他メンバーに公開する UI があるか                                         | `wallets` RLS / ranking view         |
-| DB-7     | コメント / リアクションを MVP に入れるか                                             | secret viewer 周辺テーブル                 |
+| ~~DB-3~~ | ~~ディーラーに入札者を見せるか~~ → **解決済み**。見せる（P9 確定）                             | `bids` RLS / `bidder_identified_view`（§5.2） |
+| ~~DB-4~~ | ~~AI validation を MVP で使うか~~ → **解決済み**。MVP では使わない。`validation_status` 関連を削除 | §3 Enum、§4.9、§15                     |
+| DB-5     | チャレンジ内容の粒度                                                           | `challenges` の追加カラム。PRD でもシステム提供コンテンツ自体が未定のため、MVP は汎用的な器のまま先送り |
+| ~~DB-6~~ | ~~wallet 残高を他メンバーに公開する UI があるか~~ → **解決済み**。作らない                        | `wallets` RLS / ranking view（追加なし）   |
+| ~~DB-7~~ | ~~コメント / リアクションを MVP に入れるか~~ → **解決済み**。MVP には入れない                     | secret viewer 周辺テーブル（追加なし）          |
+| DB-8     | ディーラー承認の無期限待機（P1）が長時間放置された場合の運用フォロー（リマインド通知等）                            | Phase 2。MVP は幹事の手動フォローに委ねる（`PRD.md` §9） |
 
 
 ---
@@ -1146,4 +1202,7 @@ no_sale
 - グループ間ポイント移動
 - 全所属グループへの一括ポイント付与
 - 見知らぬ人同士の公開 SNS 的な閲覧モデル
+- AI validation 関連（`validation_status` 等）— DB-4 確定（2026-08-17）。MVP 対象外。Phase 2 で AI validation を採用する場合に改めてカラム追加のマイグレーションを行う
+- wallet 残高を他メンバーに公開する view / ランキング機能 — DB-6 確定（2026-08-17）。MVP は本人のみ残高を閲覧できる
+- 秘密 / オークションへのコメント・リアクション機能とその関連テーブル — DB-7 確定（2026-08-17）
 
