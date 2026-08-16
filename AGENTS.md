@@ -75,6 +75,30 @@
 - [ ] 秘密ファイル（`.env` 等）をステージしていない
 - [ ] 導入済みなら lint / typecheck / test を実行し、結果を PR に書いた（未導入なら「未導入」と明記）
 
-## コマンド（コード追加後に追記）
+## コマンド
 
-アプリ雛形が入り次第、ここに `npm run …` 等を追記する。現状は docs 整備フェーズ。
+初回セットアップ・DB 接続確認は [README.md](./README.md#セットアップ) を参照。
+
+| コマンド | 内容 |
+| --- | --- |
+| `npm run setup` | `npm install` + Prisma Client 生成（`postinstall`）+ DB 接続確認（`db:check`） |
+| `npm run dev` | 開発サーバー起動 |
+| `npm run build` | 本番ビルド |
+| `npm run lint` | ESLint |
+| `npm run db:dev` | ローカル Prisma Postgres を起動（Supabase に繋がない場合の代替） |
+| `npm run db:generate` | Prisma Client を再生成（スキーマ変更後に実行） |
+| `npm run db:migrate` | `prisma migrate dev`（マイグレーション作成・適用） |
+| `npm run db:studio` | Prisma Studio（DB の中身をブラウザで確認） |
+| `npm run db:check` | `DATABASE_URL` への疎通確認のみ実行 |
+
+lint / typecheck（`npx tsc --noEmit`）/ build は導入済み。test は未導入。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
