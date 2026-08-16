@@ -54,11 +54,11 @@
 | ポイント credit / debit | PostgreSQL Function | グループ分離を SQL で強制 |
 | オークション終了確定 | PostgreSQL Function（`pg_cron` 等から） | 複数テーブル一括更新 |
 | 出品確定・前払い振込・不落札没収 | PostgreSQL Function | ウォレット整合 |
-| 落札時の按分（ディーラー/出品者） | PostgreSQL Function | 按分比は設定値（P7 未定） |
+| 落札時の按分（ディーラー/出品者） | PostgreSQL Function | 按分比は設定値。出品者70% : ディーラー30%（P7 確定） |
 | チャレンジ承認集計→付与 | PostgreSQL Function | 承認と付与を同一 TX |
 | プッシュ通知 | Edge Function | Web Push 等の外部 I/O |
 | 写真提出の検証・Storage 連携 | Edge Function | 外部/ファイル処理 |
-| 秘密価格の AI validation | Edge Function（候補） | 外部モデル API。**無料枠で可能なら MVP**。不可ならスキップ or Phase 2 |
+| 秘密価格の AI validation | — | **MVP では実施しない（DB-4 確定）**。Phase 2 で Edge Function 経由の再検討候補 |
 
 クライアントから直接「残高を足す」等の危険な更新は行わない。残高変更は RPC（Function）経由のみ。
 
@@ -82,7 +82,7 @@
 | --- | --- | --- |
 | Supabase Auth | ✅ | Email / Magic Link / OAuth（Google 等）を技術的に許容 |
 | どの provider を本番でオンにするか | 運用で決定 | 本 TRD では「Supabase Auth 広め」まで固定。特定1方式への絞り込みは未確定 |
-| プロフィール（ニックネーム・アイコン） | ✅ | `profiles` 等で Auth ユーザーに紐づけ |
+| プロフィール（ニックネーム・アイコン） | ✅ | `users` 等で Auth ユーザーに紐づけ |
 
 セッションは Supabase クライアントの標準フローに従う。
 
@@ -110,13 +110,13 @@
 
 | エンティティ | 要点 |
 | --- | --- |
-| `profiles` | ユーザー表示名、アイコン |
-| `groups` | グループ名・アイコン、設定（スケジュール等。数値は未定パラメータ） |
+| `users` | ユーザー表示名、アイコン |
+| `groups` | グループ名・アイコン、`group_auction_settings`（オークション設定。値は P1–P12 確定。`auction_open_seconds` のみ幹事が変更可） |
 | `group_members` | 所属、役割（member / admin） |
 | `wallets` | `(group_id, user_id)` 一意。残高（**マイナス可**）。入札は残高不足なら拒否 |
 | `wallet_ledger` | グループ単位の増減履歴 |
 | `secrets` | 本文、カテゴリ、レア度（自己申告）、状態（registered → listed → on_auction → sold / returned 等） |
-| `secret_listings` / `auctions` | 出品・競り。開始価格、時間窓（P1–P3 未定）、ディーラー |
+| `secret_listings` / `auctions` | 出品・競り。開始価格 = 出品価格（P3）、開始はディーラー承認によるイベント駆動（P1）、開放時間はグループ設定値・既定24時間（P2）、ディーラー |
 | `bids` | 入札。**エスクローなし**（負けても残高拘束・消費なし）。勝者確定時のみ debit |
 | `challenges` / `challenge_attempts` / `challenge_approvals` | 機能枠。システム提供内容は未定 |
 | `collections` 相当 | 落札閲覧権・コレクション表示 |
@@ -126,13 +126,12 @@
 - **エスクローなし**: 入札行の insert だけでは `wallets.balance` を減らさない。落札確定時に勝者のみ debit
 - **自出品入札不可**: Function 内で `auction` の出品者と `auth.uid()` を比較して拒否
 - **マイナス残高**: 不落札没収等で balance &lt; 0 を許容し得る。ただし **入札 RPC は `balance >= bid_amount` を要求**（入札で借金を増やさない）
-- **按分・前払い・目減り**: P4–P7, P6 等が未定のため、定数テーブル or グループ設定で差し替え可能にする
+- **按分・前払い・目減り**: P4–P7 は確定済み（前払い100%、追加振込なし、目減り20%、按分70:30）。値は `group_auction_settings` に保持し、将来の調整に備える（実運用は固定値。`DB.md` §4.5）
 
-### 6.2 AI validation（条件付き MVP）
+### 6.2 AI validation（MVP 対象外・確定）
 
-- Edge Function から**無料枠**の推論 API（または自前の軽量チェック）を呼ぶ案
-- 無料で品質・レートが足りない場合は **呼び出さず登録を通し、Phase 2 で再導入**
-- 有料前提の必須化はしない（PRD）
+- DB-4 確定（2026-08-17）により、**MVP では実施しない**。出品内容のチェックなしで登録を通す
+- Phase 2 で無料枠の推論 API 等が使える場合に再検討する
 
 ---
 
@@ -144,10 +143,11 @@
 | --- | --- | --- |
 | `create_group` / `join_group` | 作成・参加・招待消費 | 幹事の初期設定 |
 | `register_secret` | 登録（未出品） | 任意で validation Edge 呼び出し |
-| `list_secret`（出品実施） | 状態遷移 + 前払い credit（P4 未定） | |
+| `list_secret`（出品実施） | 状態遷移（`pending_dealer_approval`）+ 前払い credit（P4 確定・出品価格の100%） | dealer ランダム選抜も同時に行う |
+| `approve_dealer_assignment` | ディーラー承認。`open` へ遷移し `starts_at`/`ends_at` を確定（P1・P2） | ディーラー本人のみ |
 | `place_bid` | 入札可能チェック・insert | エスクローなし。自出品不可。残高不足不可 |
-| `finalize_auction` | 終了・落札 debit・按分・状態更新 | cron から |
-| `decline_dealer` | 辞退料 debit・再割当 | P12 未定 |
+| `finalize_auction` | 終了・落札 debit・按分（P7・出品者70:ディーラー30）・状態更新 | cron から |
+| `decline_dealer` | 辞退料 debit（P12 確定・出品価格の5%、完全没収）・再割当 | 開始（承認）前のみ可 |
 | `submit_challenge` / `approve_challenge` | 提出・承認・付与 | 中身未定でもインターフェースはグループ紐づけ必須 |
 | `leave_group` | 脱退・当該 wallet 失効 | |
 
@@ -155,9 +155,8 @@
 
 ### 7.1 情報非対称（入札者の見え方）
 
-- 出品者: 入札者を識別可能
+- 出品者・ディーラー: 入札者を識別可能（P9 確定）
 - その他参加者: 入札者を識別不可（額・時刻などの公開範囲は UI 要件に合わせて制限）
-- ディーラーへの開示（P9）は未定 → 実装はフラグまたは別 RPC で後から開けられる形が望ましい
 
 ---
 
@@ -195,7 +194,7 @@
 - RLS + 主要 PostgreSQL Functions（グループ・秘密・wallet・入札・終了確定）
 - Realtime（§5 の広め）
 - Auth（Supabase・provider は広め）
-- AI validation は**無料枠で現実的なら** Edge 経由で接続。否则スキップ可能な設計
+- AI validation は**実施しない**（DB-4 確定）
 - マイナス残高スキーマ許容 + 入札時の非負十分残高チェック
 
 ### 10.2 Phase 2 見通し
@@ -233,12 +232,12 @@
 
 | ID | 内容 | 依存 |
 | --- | --- | --- |
-| T1 | P1–P7, P9–P12 の定数の置き場（グローバル / グループ設定） | PRD §6 |
+| ~~T1~~ | ~~P1–P7, P9–P12 の定数の置き場~~ → **解決済み**。`group_auction_settings`（グループ設定）に確定（`DB.md` §4.5） | PRD §6 |
 | T2 | 落札確定の時計（`pg_cron` 間隔、クライアント表示とのズレ） | 技術選定 §5 |
-| T3 | 無料 AI の具体プロバイダとフォールバック | PRD AI 方針 |
+| ~~T3~~ | ~~無料 AI の具体プロバイダとフォールバック~~ → **解消**。AI validation 自体を MVP 対象外に確定（DB-4）したため不要 | PRD §6 P10 |
 | T4 | ミニゲーム「器」のテーブル粒度（中身未定のままどこまで作るか） | PRD B5 |
 | T5 | 本番で有効化する Auth provider の確定 | §4 |
-| T6 | 入札一覧の匿名化を DB でやるか API でやるか | 情報非対称 |
+| T6 | 入札一覧の匿名化を DB でやるか API でやるか（対象は出品者・ディーラー以外。P9 確定） | 情報非対称 |
 
 ---
 
@@ -247,3 +246,4 @@
 | 日付 | 内容 |
 | --- | --- |
 | 2026-08-14 | 初版。技術選定は参照のまま分離。Auth 広め / Realtime 広め / エスクローなし入札 / 自出品入札拒否 / マイナス残高許可＋入札は残高チェック / 条件付き AI validation を反映 |
+| 2026-08-17 | P1–P12 確定（`PRD.md` §6）を反映。AI validation は MVP 対象外に確定（T3 解消）。P1 の待機時間をディーラー承認によるイベント駆動に変更し、`approve_dealer_assignment` RPC を追加。T1 解決済みにマーク |
