@@ -1,6 +1,6 @@
 # DB 設計 — 秘密オークション（仮）
 
-ステータス: 設計ドラフト v2（P1–P12・DB-3/4/6/7 確定を反映。2026-08-17）  
+ステータス: 設計ドラフト v3（MVPスコープ削減を反映。2026-08-17）  
 作成日: 2026-08-16  
 更新日: 2026-08-17  
 対象: Supabase PostgreSQL / Auth / Realtime / Storage  
@@ -12,6 +12,13 @@ v2 での主な変更点:
 - DB-4 確定（AI validation は MVP 対象外）に伴い、`validation_status` 関連カラム・enum を削除（§3、§4.9、§15）
 - DB-6 / DB-7 確定（残高公開・コメント/リアクションは作らない）を §15 に明記
 - P2–P7・P11・P12 の確定値を `group_auction_settings` の既定値・各種計算ロジックに反映
+
+v3 での主な変更点（ハッカソンMVP向けスコープ削減。§14参照）:
+
+- `group_invites`（招待コード）を廃止し、直接招待方式に変更（`group_members.status` に `invited` を追加。§4.3、§4.4、§6.1）
+- `group_auction_settings` テーブルを廃止。P2（`auction_open_seconds`）のみ `groups` にカラムとして持ち、他の固定値はアプリ定数化（§4.5）
+- チャレンジ承認を単一承認に確定（`required_approvals` カラム廃止。§4.14、§6.4）
+- 次点繰り上げ（§10.2.1）・落札確定の2段階化（§10.2）は維持（変更なし）
 
 ---
 
@@ -127,7 +134,7 @@ wallets
 | 型                    | 値                                                                                                                                                                    |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `member_role`        | `member`, `admin`                                                                                                                                                    |
-| `member_status`      | `active`, `left`, `kicked`                                                                                                                                           |
+| `member_status`      | `invited`, `active`, `left`, `kicked`                                                                                                                                 |
 | `secret_item_status` | `registered`, `listed`, `on_auction`, `sold`, `returned`, `withdrawn`                                                                                                |
 | `auction_status`     | `pending_dealer_approval`, `open`, `finalizing`, `sold`, `no_sale`, `canceled`                                                                                       |
 | `bid_status`         | `valid`, `superseded`, `winning`, `canceled`, `failed`                                                                                                               |
@@ -182,15 +189,16 @@ RLS:
 友達グループ本体。
 
 
-| カラム           | 型             | 制約 / 用途          |
-| ------------- | ------------- | ---------------- |
-| `id`          | `uuid`        | PK               |
-| `name`        | `text`        | not null         |
-| `icon_path`   | `text`        | nullable         |
-| `created_by`  | `uuid`        | FK `users.id` |
-| `created_at`  | `timestamptz` | not null         |
-| `updated_at`  | `timestamptz` | not null         |
-| `archived_at` | `timestamptz` | nullable         |
+| カラム                      | 型             | 制約 / 用途                          |
+| ------------------------ | ------------- | --------------------------------- |
+| `id`                     | `uuid`        | PK                                 |
+| `name`                   | `text`        | not null                           |
+| `icon_path`              | `text`        | nullable                           |
+| `created_by`             | `uuid`        | FK `users.id`                      |
+| `auction_open_seconds`   | `int`         | not null default `86400`（24時間）。P2。幹事が変更可（唯一グループごとに変わる値。§4.5参照） |
+| `created_at`             | `timestamptz` | not null                           |
+| `updated_at`             | `timestamptz` | not null                           |
+| `archived_at`            | `timestamptz` | nullable                           |
 
 
 RLS:
@@ -205,18 +213,31 @@ RLS:
 
 ### 4.3 `group_members`
 
-ユーザーの所属・権限。
+ユーザーの所属・権限。2026-08-17: 招待コード方式（旧 `group_invites`）を廃止し、直接招待方式に変更。招待〜参加を `status` の遷移として表現する（§4.4参照）。
 
 
-| カラム         | 型               | 制約 / 用途                    |
-| ----------- | --------------- | -------------------------- |
-| `group_id`  | `uuid`          | PK part / FK `groups.id`   |
-| `user_id`   | `uuid`          | PK part / FK `users.id` |
-| `role`      | `member_role`   | not null                   |
-| `status`    | `member_status` | not null default `active`  |
-| `joined_at` | `timestamptz`   | not null                   |
-| `left_at`   | `timestamptz`   | nullable                   |
+| カラム         | 型               | 制約 / 用途                                    |
+| ----------- | --------------- | ------------------------------------------- |
+| `group_id`  | `uuid`          | PK part / FK `groups.id`                     |
+| `user_id`   | `uuid`          | PK part / FK `users.id`                      |
+| `role`      | `member_role`   | not null default `member`                    |
+| `status`    | `member_status` | not null default `invited`                   |
+| `invited_by`| `uuid`          | FK `users.id`。招待した admin                    |
+| `invited_at`| `timestamptz`   | not null                                     |
+| `joined_at` | `timestamptz`   | nullable。`accept_invite` で確定するまで null       |
+| `left_at`   | `timestamptz`   | nullable                                     |
 
+
+`status` の遷移:
+
+```text
+invited（招待された・未承諾）
+  → active（本人が accept_invite で承諾。同時に wallet 作成）
+  → left（本人が leave_group）
+  → kicked（admin が kick_group_member）
+
+invited → （削除）: 本人が decline_invite で辞退した場合、行ごと削除する
+```
 
 制約:
 
@@ -226,71 +247,55 @@ RLS:
 RLS:
 
 - 同じグループの active member は member 一覧を select 可
+- `invited` 本人は自分の招待行のみ select 可（グループの他メンバー一覧は見えない）
 - role / status の変更は admin RPC 経由
+- 招待の承諾・辞退は本人の `accept_invite` / `decline_invite` RPC 経由
 - 自分の脱退は `leave_group` RPC 経由
 
 ---
 
 
 
-### 4.4 `group_invites`
+### 4.4 `group_invites`（2026-08-17 廃止）
 
-招待コード / 招待リンク。
+招待コード/招待リンク方式は採用せず、**直接招待方式**に変更した。ハッカソンMVPのスコープでは、コードの発行・失効・使用回数管理までは過剰と判断（`docs/アーキテクチャ比較.md`関連の議論を参照）。
 
+代わりに:
 
-| カラム          | 型             | 制約 / 用途            |
-| ------------ | ------------- | ------------------ |
-| `id`         | `uuid`        | PK                 |
-| `group_id`   | `uuid`        | FK `groups.id`     |
-| `code_hash`  | `text`        | unique。平文コードは保存しない |
-| `created_by` | `uuid`        | FK `users.id`   |
-| `expires_at` | `timestamptz` | nullable           |
-| `max_uses`   | `int`         | nullable           |
-| `used_count` | `int`         | not null default 0 |
-| `revoked_at` | `timestamptz` | nullable           |
-| `created_at` | `timestamptz` | not null           |
+- admin が `users` をニックネームで検索し（§6.1 `search_users`）、対象ユーザーを指定して招待する（`invite_member`、§6.1）
+- 招待〜参加は `group_members.status` の遷移で表現する（§4.3）。新規テーブルは不要
 
-
-RLS:
-
-- admin は自グループ invite を select / revoke 可
-- 参加処理は `join_group` RPC で code を検証する
+このセクション番号は他章からの参照を壊さないため欠番として残す。
 
 ---
 
 
 
-### 4.5 `group_auction_settings`
+### 4.5 `group_auction_settings`（2026-08-17 廃止・アプリ定数化）
 
-P1–P12（2026-08-17 確定）の実値の置き場。グループ作成時に既定値で 1 行作成し、幹事が変更できるものは変更を許可する。P1 はイベント駆動になったため `listing_wait_seconds` は廃止（§3 `auction_status` 参照）。
+P1〜P12のうち「グループごとに変わりうる値」は実質 P2（`auction_open_seconds`）だけであり、他は全て固定値で確定している（`PRD.md` §6）。**そのためだけに1テーブルを持つのは過剰**と判断し、廃止した。
 
+- P2（`auction_open_seconds`）→ `groups` テーブルに直接カラムとして持つ（§4.2）
+- P3〜P7, P9, P11, P12（固定値）→ **DBには持たない**。アプリ側の定数として管理する
 
-| カラム                         | 型             | 対応 / 既定値                       |
-| --------------------------- | ------------- | ------------------------------- |
-| `group_id`                  | `uuid`        | PK / FK `groups.id`             |
-| `auction_open_seconds`      | `int`         | P2。既定 `86400`（24時間）。幹事が変更可      |
-| `start_price_add`           | `int`         | P3。固定 `0`                       |
-| `start_price_multiplier`    | `numeric`     | P3。固定 `1`                       |
-| `listing_prepay_rate`       | `numeric`     | P4。固定 `1.0`（100%）               |
-| `listing_prepay_fixed`      | `int`         | P4。固定 `0`                       |
-| `seller_bonus_rate`         | `numeric`     | P5。固定 `0`（追加振込なし）               |
-| `no_sale_depreciation_rate` | `numeric`     | P6。固定 `0.20`                    |
-| `dealer_share_rate`         | `numeric`     | P7。固定 `0.30`                    |
-| `seller_share_rate`         | `numeric`     | P7。固定 `0.70`                    |
-| `dealer_can_see_bidders`    | `boolean`     | P9。固定 `true`                    |
-| `min_balance_limit`         | `int`         | P11。`null`（上限なし。この仕様で固定）        |
-| `dealer_decline_fee_fixed`  | `int`         | P12。固定 `0`                      |
-| `dealer_decline_fee_rate`   | `numeric`     | P12。固定 `0.05`（出品価格の5%、完全没収）     |
-| `updated_by`                | `uuid`        | FK `users.id`                |
-| `updated_at`                | `timestamptz` | not null                        |
+| 定数 | 値 | 元のパラメータ | 参照する場所 |
+| --- | --- | --- | --- |
+| 開始価格の加算・倍率 | 加算`0`・倍率`1`（出品価格と同額） | P3 | `list_secret_for_auction`（§6.2） |
+| 前払い率 | `1.0`（100%） | P4 | `list_secret_for_auction`（§6.2） |
+| 落札時追加振込率 | `0`（なし） | P5 | `finalize_auction`（§6.3） |
+| 不落札時の目減り率 | `0.20`（20%） | P6 | `finalize_auction` / `no_sale`（§10.3） |
+| 按分比（出品者:ディーラー） | `0.70 : 0.30` | P7 | `finalize_auction`（§6.3） |
+| ディーラーへの入札者開示 | 常に `true` | P9 | `bidder_identified_view`（§5.2）。フラグ分岐なしで固定実装 |
+| マイナス残高上限 | 上限なし | P11 | `place_bid`（残高不足チェックのみ。上限チェック自体を実装しない） |
+| ディーラー辞退料率 | `0.05`（出品価格の5%） | P12 | `decline_dealer`（§6.3） |
 
+**運用ルール（アプリ層・SQL層の二重管理への対策）**:
 
-補足:
+- これらの数値は表示（UI文言）と強制（PostgreSQL Function内のロジック）の両方で使うため、**アプリ側の定数ファイル1箇所**（例: `lib/auction-constants.ts`）と、**各PostgreSQL Function内のリテラル値**の2箇所に実質重複する
+- ズレを防ぐため、各Functionの定義（`prisma/sql/auctions/*.sql`）冒頭のコメントに「この値は `lib/auction-constants.ts` の `XXX` と一致させること。変更時は両方直す」と明記する
+- 値そのものの変更が必要になった場合（P1–P12のバランス調整）は、`PRD.md` §6・本セクション・`lib/auction-constants.ts`・該当SQLファイルの4箇所を同時に直す
 
-- P8 は PRD で「自出品への入札不可」が確定しているため設定化しない
-- 「固定」と記載した値も本テーブルのカラムとして持つ（将来グループごとに変えたくなった場合の変更コストを抑えるため）。ただし MVP の UI では `auction_open_seconds` 以外は編集不可にする
-- `dealer_share_rate + seller_share_rate = 1` を check constraint で保証する
-- `min_balance_limit` が `null` の場合、`place_bid` は残高不足チェック（`balance >= amount`）のみ行い、確定済みの借金には上限を課さない
+このセクション番号は他章からの参照を壊さないため欠番として残す。
 
 ---
 
@@ -601,17 +606,16 @@ RLS:
 | `description`             | `text`             | nullable                         |
 | `reward_points`           | `int`              | not null                         |
 | `requires_evidence_photo` | `boolean`          | default false                    |
-| `required_approvals`      | `int`              | not null default 1               |
 | `cooldown_seconds`        | `int`              | nullable                         |
 | `status`                  | `challenge_status` | not null                         |
 | `created_at`              | `timestamptz`      | not null                         |
 | `updated_at`              | `timestamptz`      | not null                         |
 
+`required_approvals` は2026-08-17に廃止。MVPでは**単一承認**（誰か1人が承認したら即付与）に確定したため、カラム自体を持たず `approve_challenge` 側で「1件目の承認で即確定」として扱う（§6.4）。複数人承認クオラムはPhase 2で必要になった時点でカラムを復活させる。
 
 制約:
 
 - `reward_points >= 0`
-- `required_approvals >= 1`
 - 自己承認不可は approvals 側と RPC で保証
 
 RLS:
@@ -808,13 +812,16 @@ RLS / view 条件:
 ### 6.1 アカウント / グループ
 
 
-| RPC                                                 | 責務                                                     |
-| --------------------------------------------------- | ------------------------------------------------------ |
-| `create_group(name, icon_path)`                     | group 作成、作成者を admin member にする、wallet 初期化、settings 初期化 |
-| `join_group(invite_code)`                           | invite 検証、member 追加、wallet 初期化                         |
-| `leave_group(group_id)`                             | member status を left、wallet を expired。最後の admin なら拒否   |
-| `update_group_member_role(group_id, user_id, role)` | admin 権限付与 / 剥奪。最後の admin 剥奪は拒否                        |
-| `kick_group_member(group_id, user_id)`              | admin による kick。wallet 失効                               |
+| RPC                                                 | 責務                                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `create_group(name, icon_path)`                     | group 作成、作成者を admin member（`active`）にする、wallet 初期化                            |
+| `search_users(query)`                                | ニックネームの部分一致検索。`id, nickname, avatar_path` のみ返す（招待相手を探すため）。本文・wallet等は含めない |
+| `invite_member(group_id, user_id)`                  | admin のみ。`group_members` を `status = invited` で作成（旧 `join_group(invite_code)` を置き換え。§4.3・§4.4） |
+| `accept_invite(group_id)`                           | 本人のみ。`invited` → `active`、`joined_at` 確定、wallet 初期化                            |
+| `decline_invite(group_id)`                          | 本人のみ。`invited` 行を削除                                                          |
+| `leave_group(group_id)`                             | member status を left、wallet を expired。最後の admin なら拒否                          |
+| `update_group_member_role(group_id, user_id, role)` | admin 権限付与 / 剥奪。最後の admin 剥奪は拒否                                               |
+| `kick_group_member(group_id, user_id)`              | admin による kick。wallet 失効                                                     |
 
 
 
@@ -838,7 +845,7 @@ RLS / view 条件:
 
 | RPC                                        | 責務                                                                                                           |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `approve_dealer_assignment(auction_id)`     | 割り当てられた dealer 本人のみ実行可。`pending_dealer_approval` → `open`。`starts_at = now()`、`ends_at = now() + group_auction_settings.auction_open_seconds` を確定（P1・P2） |
+| `approve_dealer_assignment(auction_id)`     | 割り当てられた dealer 本人のみ実行可。`pending_dealer_approval` → `open`。`starts_at = now()`、`ends_at = now() + groups.auction_open_seconds` を確定（P1・P2） |
 | `place_bid(auction_id, amount)`             | 所属・状態（`open`）・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新                                                    |
 | `claim_auction_for_finalize(auction_id)`    | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照）                                |
 | `finalize_auction(auction_id)`              | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit（P7）、閲覧権付与、status 更新（Stage B） |
@@ -868,7 +875,7 @@ RLS / view 条件:
 | RPC                                                       | 責務                                 |
 | --------------------------------------------------------- | ---------------------------------- |
 | `submit_challenge(group_id, challenge_id, evidence_path)` | 所属・cooldown・上限を確認して attempt 作成     |
-| `approve_challenge(attempt_id, decision)`                 | 自己承認不可、承認数集計、必要数到達時に wallet credit |
+| `approve_challenge(attempt_id, decision)`                 | 自己承認不可（`approver_id <> challenge_attempts.user_id`）。単一承認（2026-08-17確定）: `decision = 'approved'` の1件目の承認記録と同時に `attempt.status = awarded` にして即 wallet credit。以降の承認呼び出しは冪等に無視（二重付与防止） |
 | `create_group_challenge(group_id, ...)`                   | admin による group 独自 challenge 作成    |
 
 
@@ -919,8 +926,7 @@ is_group_admin(target_group_id uuid) returns boolean
 | --------------------- | --------------------------- | ------------------------ |
 | `users`            | 本人 + 同 group member の表示情報   | 本人のみ update              |
 | `groups`              | active member               | admin RPC                |
-| `group_members`       | 同 group member              | admin / leave RPC        |
-| `group_invites`       | admin                       | admin RPC                |
+| `group_members`       | 同 group member（`invited` 本人は自分の行のみ） | `invite_member` / `accept_invite` / `decline_invite` / admin RPC |
 | `wallets`             | 本人のみ                        | wallet RPC               |
 | `wallet_ledger`       | 本人のみ                        | wallet RPC               |
 | `secrets`             | owner / access holder       | owner の出品前 RPC           |
@@ -1006,7 +1012,7 @@ MVP 購読候補:
 approve_dealer_assignment
   1. auction を status = 'pending_dealer_approval' 条件で FOR UPDATE
   2. 呼び出しユーザーが auctions.dealer_id 本人であることを確認
-  3. group_auction_settings.auction_open_seconds を取得
+  3. groups.auction_open_seconds を取得
   4. auctions.dealer_approved_at = now()
   5. auctions.starts_at = now()
   6. auctions.ends_at = now() + auction_open_seconds
@@ -1019,7 +1025,7 @@ decline_dealer
      （'open' 以降なら中断。開始後の辞退は不可）
   2. 呼び出しユーザーが auctions.dealer_id 本人であることを確認
   3. dealer wallet を FOR UPDATE
-  4. fee = secret_group_items.asking_price * dealer_decline_fee_rate（5%）を debit（allow_negative）
+  4. fee = secret_group_items.asking_price * 0.05（定数。§4.5参照）を debit（allow_negative）
   5. dealer_declines insert（fee_amount, wallet_ledger_id）
   6. 出品者以外・現 dealer 以外の active group member からランダムに新 dealer を選抜
   7. auctions.dealer_id を新 dealer に更新
@@ -1133,15 +1139,15 @@ no_sale
 ## 12. Migration 実装順
 
 1. enum / helper function
-2. users / groups / group_members / group_invites
+2. users / groups / group_members（`group_invites` は廃止。§4.4参照）
 3. wallets / wallet_ledger / wallet helper
 4. secrets / secret_group_items
-5. group_auction_settings
-6. auctions / bids / secret_accesses / dealer_declines
-7. challenges / challenge_attempts / challenge_approvals
-8. views
-9. RLS policies
-10. RPC
+5. auctions / bids / secret_accesses / dealer_declines
+6. challenges / challenge_attempts / challenge_approvals
+7. views
+8. RLS policies
+9. RPC
+10. `lib/auction-constants.ts`（アプリ側の定数。§4.5参照。RPC実装と同時に用意する）
 11. seed.sql
 
 ---
@@ -1164,7 +1170,8 @@ no_sale
 | 二重確定防止  | `claim_auction_for_finalize` の重複起動、および Stage A/B 間で同一 auction が二重に `finalize_auction` されないこと |
 | 不落札     | prepay 没収でマイナス残高になり得る。候補全滅（全員残高不足）でも no_sale になる                                             |
 | 秘密本文    | 落札前に owner 以外が読めない。落札後は winner が読める                                                          |
-| チャレンジ   | 自己承認不可、必要承認数到達時に一度だけ付与                                                                       |
+| チャレンジ   | 自己承認不可、1件目の承認で即付与・以降は二重付与されない                                                                |
+| 招待      | `invited` の間は自分の招待行しか見えない（他メンバー一覧は見えない）。`accept_invite` で `active` 化と同時に wallet が作られる。`decline_invite` で行が消える |
 | ディーラー承認 | `pending_dealer_approval` 以外では `approve_dealer_assignment` / `decline_dealer` が失敗する。dealer 本人以外は実行不可 |
 | ディーラー辞退 | 辞退のたびに `asking_price * 5%` が debit され、`dealer_id` が新しい dealer に更新される。`open` 後は辞退不可 |
 | 入札者開示   | seller・dealer は `bidder_identified_view` で bidder を識別できる。それ以外は匿名 view のみ                        |
@@ -1187,6 +1194,10 @@ no_sale
 | ~~DB-6~~ | ~~wallet 残高を他メンバーに公開する UI があるか~~ → **解決済み**。作らない                        | `wallets` RLS / ranking view（追加なし）   |
 | ~~DB-7~~ | ~~コメント / リアクションを MVP に入れるか~~ → **解決済み**。MVP には入れない                     | secret viewer 周辺テーブル（追加なし）          |
 | DB-8     | ディーラー承認の無期限待機（P1）が長時間放置された場合の運用フォロー（リマインド通知等）                            | Phase 2。MVP は幹事の手動フォローに委ねる（`PRD.md` §9） |
+| ~~DB-9~~ | ~~招待コード（`group_invites`）を作るか、直接招待方式にするか~~ → **解決済み（2026-08-17）**。直接招待方式に変更、テーブル廃止 | §4.3、§4.4、§6.1 |
+| ~~DB-10~~ | ~~チャレンジ承認を複数人承認クオラムのまま作るか~~ → **解決済み**。単一承認に簡略化 | §4.14、§6.4 |
+| ~~DB-11~~ | ~~`group_auction_settings` をテーブルのまま持つか~~ → **解決済み**。P2のみ`groups`へ、他はアプリ定数化 | §4.2、§4.5 |
+| DB-12 | 次点繰り上げ（§10.2.1）・落札確定2段階化（§10.2）は簡略化せず維持することを確認済み。実装量は増えるままなので、テスト（§13）を優先的に書く | §10.2、§10.2.1 |
 
 
 ---
