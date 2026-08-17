@@ -10,7 +10,10 @@ features/<domain>/
   actions.ts    Server Actions。入力バリデーション（Zod）+ server/ の呼び出しだけ
   server/       Prisma / RPC 呼び出し本体。lib/db・lib/prisma を import してよいのはここだけ
   types.ts      このドメインの型（任意）
+  constants.ts  このドメイン固有の定数（任意。例: features/auctions/constants.ts）
 ```
+
+ドメイン固有のルール・定数（按分比率など）は `lib/` に置かない（`lib/README.md`参照）。そのドメインの `constants.ts` に置く。
 
 ## 依存の向き（ESLintで強制。`eslint.config.mjs` の boundaries 設定参照）
 

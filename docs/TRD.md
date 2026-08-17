@@ -111,7 +111,7 @@
 | エンティティ | 要点 |
 | --- | --- |
 | `users` | ユーザー表示名、アイコン |
-| `groups` | グループ名・アイコン、`group_auction_settings`（オークション設定。値は P1–P12 確定。`auction_open_seconds` のみ幹事が変更可） |
+| `groups` | グループ名・アイコン、`auction_open_seconds`（オークション開放時間。値は P1–P12 確定。これだけ幹事が変更可。他の固定値はアプリ定数。2026-08-17: `group_auction_settings`テーブルは廃止。`DB.md` §4.5） |
 | `group_members` | 所属、役割（member / admin） |
 | `wallets` | `(group_id, user_id)` 一意。残高（**マイナス可**）。入札は残高不足なら拒否 |
 | `wallet_ledger` | グループ単位の増減履歴 |
@@ -126,7 +126,7 @@
 - **エスクローなし**: 入札行の insert だけでは `wallets.balance` を減らさない。落札確定時に勝者のみ debit
 - **自出品入札不可**: Function 内で `auction` の出品者と `auth.uid()` を比較して拒否
 - **マイナス残高**: 不落札没収等で balance &lt; 0 を許容し得る。ただし **入札 RPC は `balance >= bid_amount` を要求**（入札で借金を増やさない）
-- **按分・前払い・目減り**: P4–P7 は確定済み（前払い100%、追加振込なし、目減り20%、按分70:30）。値は `group_auction_settings` に保持し、将来の調整に備える（実運用は固定値。`DB.md` §4.5）
+- **按分・前払い・目減り**: P4–P7 は確定済み（前払い100%、追加振込なし、目減り20%、按分70:30）。値はアプリ定数（`features/auctions/constants.ts`）とPostgreSQL Function内のリテラルで保持する（`DB.md` §4.5）
 
 ### 6.2 AI validation（MVP 対象外・確定）
 
@@ -232,7 +232,7 @@
 
 | ID | 内容 | 依存 |
 | --- | --- | --- |
-| ~~T1~~ | ~~P1–P7, P9–P12 の定数の置き場~~ → **解決済み**。`group_auction_settings`（グループ設定）に確定（`DB.md` §4.5） | PRD §6 |
+| ~~T1~~ | ~~P1–P7, P9–P12 の定数の置き場~~ → **解決済み**。P2のみ`groups.auction_open_seconds`、他はアプリ定数（`features/auctions/constants.ts`）に確定（`DB.md` §4.5） | PRD §6 |
 | T2 | 落札確定の時計（`pg_cron` 間隔、クライアント表示とのズレ） | 技術選定 §5 |
 | ~~T3~~ | ~~無料 AI の具体プロバイダとフォールバック~~ → **解消**。AI validation 自体を MVP 対象外に確定（DB-4）したため不要 | PRD §6 P10 |
 | T4 | ミニゲーム「器」のテーブル粒度（中身未定のままどこまで作るか） | PRD B5 |
