@@ -12,12 +12,21 @@ import { prisma } from "@/lib/prisma";
  * 各ファイルは `CREATE OR REPLACE FUNCTION` / `DROP POLICY IF EXISTS` +
  * `CREATE POLICY` のように、再実行しても壊れない書き方にすること。
  */
+// common（is_group_member 等の共通ヘルパー）は他ドメインのRLS/RPCから
+// 参照されるため、辞書順に関わらず必ず最初に適用する。
+const PRIORITY_DOMAINS = ["common"];
+
 async function main() {
   const sqlRoot = join(process.cwd(), "prisma", "sql");
-  const domains = (await readdir(sqlRoot, { withFileTypes: true }))
+  const allDomains = (await readdir(sqlRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
+
+  const domains = [
+    ...PRIORITY_DOMAINS.filter((d) => allDomains.includes(d)),
+    ...allDomains.filter((d) => !PRIORITY_DOMAINS.includes(d)),
+  ];
 
   for (const domain of domains) {
     const domainDir = join(sqlRoot, domain);

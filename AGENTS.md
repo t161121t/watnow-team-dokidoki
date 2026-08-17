@@ -97,6 +97,8 @@
 | `npm run db:check` | `DATABASE_URL` への疎通確認のみ実行 |
 | `npm run db:sql` | `prisma/sql/**/*.sql`（PostgreSQL Functions・RLSポリシー）を適用 |
 | `npm run db:setup` | `prisma migrate deploy` + `db:sql` をまとめて実行 |
+| `npm run verify:rls` | `withRlsContext` がRLSを正しく効かせるかを実DBで検証（テストユーザーを作成・削除） |
+| `npm run verify:auction` | 出品〜入札〜落札確定（次点繰り上げ含む）を実DBで通しで検証 |
 
 lint / typecheck（`npx tsc --noEmit`）/ build は導入済み。test は未導入。
 

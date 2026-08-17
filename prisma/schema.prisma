@@ -1,7 +1,10 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// DB設計の正本は docs/DB.md（v5）。カラム定義・制約・RLS方針はそちらを参照。
+// テーブル名・カラム名はDBでは snake_case、Prisma Client からは camelCase で使う（@map/@@map）。
+//
+// 手動で追加する必要があるもの（Prismaのスキーマ言語では表現できない）:
+// - CHECK制約（groups.auction_open_seconds > 0 など）: 生成された migration.sql に手で追記する
+// - auth.users への FK（Supabase管理のスキーマのため、Prismaからは参照しない。id の値は一致させる運用）
+// - RLSポリシー・PostgreSQL Functions・trigger: prisma/sql/<domain>/ に別管理（docs/アーキテクチャ.md §3）
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +13,351 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------- Enum（docs/DB.md §3） ----------
+
+enum MemberRole {
+  member
+  admin
+
+  @@map("member_role")
+}
+
+enum MemberStatus {
+  invited
+  active
+  left
+  kicked
+
+  @@map("member_status")
+}
+
+enum SecretItemStatus {
+  registered
+  listed
+  on_auction
+  sold
+  returned
+  withdrawn
+
+  @@map("secret_item_status")
+}
+
+enum AuctionStatus {
+  pending_dealer_approval
+  open
+  finalizing
+  sold
+  no_sale
+  canceled
+
+  @@map("auction_status")
+}
+
+enum BidStatus {
+  valid
+  superseded
+  winning
+  canceled
+  failed
+
+  @@map("bid_status")
+}
+
+enum WalletTxKind {
+  challenge_reward
+  listing_prepay
+  listing_reclaim
+  winning_bid_debit
+  seller_share_credit
+  dealer_share_credit
+  dealer_decline_fee
+  admin_adjustment
+
+  @@map("wallet_tx_kind")
+}
+
+enum ChallengeStatus {
+  active
+  archived
+
+  @@map("challenge_status")
+}
+
+enum AttemptStatus {
+  pending
+  approved
+  rejected
+  awarded
+  canceled
+
+  @@map("attempt_status")
+}
+
+enum ApprovalDecision {
+  approved
+  rejected
+
+  @@map("approval_decision")
+}
+
+// ---------- テーブル（docs/DB.md §4） ----------
+
+/// §4.1. auth.users と1:1（idを一致させる。Prisma側からauth.usersへのFKは張らない）
+model User {
+  id         String   @id @db.Uuid
+  nickname   String
+  avatarPath String?  @map("avatar_path")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdGroups     Group[]            @relation("GroupCreatedBy")
+  groupMemberships  GroupMember[]      @relation("GroupMemberUser")
+  invitesSent       GroupMember[]      @relation("GroupMemberInvitedBy")
+  wallets           Wallet[]
+  walletLedgerOwn   WalletLedger[]     @relation("WalletLedgerUser")
+  walletLedgerActed WalletLedger[]     @relation("WalletLedgerCreatedBy")
+  secrets           Secret[]
+  sellingAuctions   Auction[]          @relation("AuctionSeller")
+  dealingAuctions   Auction[]          @relation("AuctionDealer")
+  wonAuctions       Auction[]          @relation("AuctionWinner")
+  bids              Bid[]
+  createdChallenges Challenge[]        @relation("ChallengeCreatedBy")
+  challengeAttempts ChallengeAttempt[] @relation("ChallengeAttemptUser")
+  reviewedAttempts  ChallengeAttempt[] @relation("ChallengeAttemptReviewedBy")
+
+  @@map("users")
+}
+
+/// §4.2
+model Group {
+  id                 String    @id @default(uuid()) @db.Uuid
+  name               String
+  iconPath           String?   @map("icon_path")
+  createdBy          String    @map("created_by") @db.Uuid
+  /// P2。既定24時間。グループごとに変わる唯一の値（他はfeatures/auctions/constants.ts）。
+  /// CHECK (auction_open_seconds > 0) は migration.sql に手動追加すること（docs/DB.md §4.2）
+  auctionOpenSeconds Int       @default(86400) @map("auction_open_seconds")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt         DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  creator           User               @relation("GroupCreatedBy", fields: [createdBy], references: [id])
+  members           GroupMember[]
+  wallets           Wallet[]
+  walletLedger      WalletLedger[]
+  secretGroupItems  SecretGroupItem[]
+  auctions          Auction[]
+  bids              Bid[]
+  challenges        Challenge[]
+  challengeAttempts ChallengeAttempt[]
+
+  @@map("groups")
+}
+
+/// §4.3. 招待コード廃止・直接招待方式。status の遷移はdocs/DB.md参照
+model GroupMember {
+  groupId   String       @map("group_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  role      MemberRole   @default(member)
+  status    MemberStatus @default(invited)
+  invitedBy String       @map("invited_by") @db.Uuid
+  invitedAt DateTime     @default(now()) @map("invited_at") @db.Timestamptz(6)
+  joinedAt  DateTime?    @map("joined_at") @db.Timestamptz(6)
+  leftAt    DateTime?    @map("left_at") @db.Timestamptz(6)
+
+  group   Group @relation(fields: [groupId], references: [id])
+  user    User  @relation("GroupMemberUser", fields: [userId], references: [id])
+  inviter User  @relation("GroupMemberInvitedBy", fields: [invitedBy], references: [id])
+
+  @@id([groupId, userId])
+  @@index([userId, status])
+  @@map("group_members")
+}
+
+/// §4.6
+model Wallet {
+  groupId   String    @map("group_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// マイナス可（P11確定。上限なし）。直接updateは禁止、RPC経由のみ
+  balance   Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  expiredAt DateTime? @map("expired_at") @db.Timestamptz(6)
+
+  group  Group          @relation(fields: [groupId], references: [id])
+  user   User           @relation(fields: [userId], references: [id])
+  ledger WalletLedger[]
+
+  @@id([groupId, userId])
+  @@map("wallets")
+}
+
+/// §4.7. append-only。旧dealer_declinesはkind='dealer_decline_fee'の行として統合済み
+model WalletLedger {
+  id           String       @id @default(uuid()) @db.Uuid
+  groupId      String       @map("group_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  amount       Int
+  balanceAfter Int          @map("balance_after")
+  kind         WalletTxKind
+  refTable     String?      @map("ref_table")
+  refId        String?      @map("ref_id") @db.Uuid
+  createdBy    String?      @map("created_by") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group  Group  @relation(fields: [groupId], references: [id])
+  wallet Wallet @relation(fields: [groupId, userId], references: [groupId, userId])
+  user   User   @relation("WalletLedgerUser", fields: [userId], references: [id])
+  actor  User?  @relation("WalletLedgerCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([groupId, userId, createdAt(sort: Desc)])
+  @@index([kind, refTable, refId])
+  @@map("wallet_ledger")
+}
+
+/// §4.8. グループ非依存。公開状態は secret_group_items が持つ
+model Secret {
+  id        String    @id @default(uuid()) @db.Uuid
+  ownerId   String    @map("owner_id") @db.Uuid
+  body      String
+  summary   String
+  category  String
+  /// 自己申告。1-5
+  rarity    Int
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  owner            User              @relation(fields: [ownerId], references: [id])
+  secretGroupItems SecretGroupItem[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("secrets")
+}
+
+/// §4.9. seller_idは持たない（secrets.owner_idへの冗長列だったため2026-08-17削除）
+model SecretGroupItem {
+  id           String           @id @default(uuid()) @db.Uuid
+  secretId     String           @map("secret_id") @db.Uuid
+  groupId      String           @map("group_id") @db.Uuid
+  status       SecretItemStatus
+  askingPrice  Int              @map("asking_price")
+  currentValue Int              @map("current_value")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  secret   Secret    @relation(fields: [secretId], references: [id])
+  group    Group     @relation(fields: [groupId], references: [id])
+  auctions Auction[]
+
+  @@unique([secretId, groupId])
+  @@index([groupId, status, updatedAt(sort: Desc)])
+  @@map("secret_group_items")
+}
+
+/// §4.10. P1確定によりstarts_at/ends_atはpending_dealer_approvalの間null。
+/// winner_idが閲覧権の正本（旧secret_accesses統合）
+model Auction {
+  id                       String        @id @default(uuid()) @db.Uuid
+  groupId                  String        @map("group_id") @db.Uuid
+  secretGroupItemId        String        @map("secret_group_item_id") @db.Uuid
+  /// secret_group_items経由で導出可能な冗長列。place_bidのホットパス性能のため意図的に非正規化
+  sellerId                 String        @map("seller_id") @db.Uuid
+  dealerId                 String        @map("dealer_id") @db.Uuid
+  status                   AuctionStatus @default(pending_dealer_approval)
+  startingPrice            Int           @map("starting_price")
+  currentPrice             Int           @map("current_price")
+  dealerApprovedAt         DateTime?     @map("dealer_approved_at") @db.Timestamptz(6)
+  startsAt                 DateTime?     @map("starts_at") @db.Timestamptz(6)
+  endsAt                   DateTime?     @map("ends_at") @db.Timestamptz(6)
+  winnerId                 String?       @map("winner_id") @db.Uuid
+  winningBidId             String?       @map("winning_bid_id") @db.Uuid
+  finalPrice               Int?          @map("final_price")
+  listingPrepayAmount      Int           @map("listing_prepay_amount")
+  sellerShareAmount        Int?          @map("seller_share_amount")
+  dealerShareAmount        Int?          @map("dealer_share_amount")
+  noSaleDepreciationAmount Int?          @map("no_sale_depreciation_amount")
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  finalizedAt              DateTime?     @map("finalized_at") @db.Timestamptz(6)
+
+  group           Group           @relation(fields: [groupId], references: [id])
+  secretGroupItem SecretGroupItem @relation(fields: [secretGroupItemId], references: [id])
+  seller          User            @relation("AuctionSeller", fields: [sellerId], references: [id])
+  dealer          User            @relation("AuctionDealer", fields: [dealerId], references: [id])
+  winner          User?           @relation("AuctionWinner", fields: [winnerId], references: [id])
+  bids            Bid[]
+
+  @@index([groupId, status, startsAt, endsAt])
+  @@index([secretGroupItemId])
+  @@index([winnerId, groupId, finalizedAt(sort: Desc)])
+  @@map("auctions")
+}
+
+/// §4.11. エスクローなし。insert時点ではwallet変動なし
+model Bid {
+  id        String    @id @default(uuid()) @db.Uuid
+  groupId   String    @map("group_id") @db.Uuid
+  auctionId String    @map("auction_id") @db.Uuid
+  bidderId  String    @map("bidder_id") @db.Uuid
+  amount    Int
+  status    BidStatus @default(valid)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group   Group   @relation(fields: [groupId], references: [id])
+  auction Auction @relation(fields: [auctionId], references: [id])
+  bidder  User    @relation(fields: [bidderId], references: [id])
+
+  @@index([auctionId, amount(sort: Desc), createdAt(sort: Asc)])
+  @@index([groupId, bidderId, createdAt(sort: Desc)])
+  @@map("bids")
+}
+
+/// §4.14. システム提供内容は未定のため汎用的な器（DB-5、未確定のまま）
+model Challenge {
+  id                    String          @id @default(uuid()) @db.Uuid
+  groupId               String?         @map("group_id") @db.Uuid
+  createdBy             String?         @map("created_by") @db.Uuid
+  title                 String
+  description           String?
+  rewardPoints          Int             @map("reward_points")
+  requiresEvidencePhoto Boolean         @default(false) @map("requires_evidence_photo")
+  cooldownSeconds       Int?            @map("cooldown_seconds")
+  status                ChallengeStatus
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  group    Group?             @relation(fields: [groupId], references: [id])
+  creator  User?              @relation("ChallengeCreatedBy", fields: [createdBy], references: [id])
+  attempts ChallengeAttempt[]
+
+  @@map("challenges")
+}
+
+/// §4.15. 旧challenge_approvalsの承認情報(reviewedBy等)を統合済み（単一承認確定のため）
+model ChallengeAttempt {
+  id               String            @id @default(uuid()) @db.Uuid
+  groupId          String            @map("group_id") @db.Uuid
+  challengeId      String            @map("challenge_id") @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  status           AttemptStatus     @default(pending)
+  evidencePath     String?           @map("evidence_path")
+  rewardPoints     Int?              @map("reward_points")
+  awardedLedgerId  String?           @map("awarded_ledger_id") @db.Uuid
+  reviewedBy       String?           @map("reviewed_by") @db.Uuid
+  reviewedDecision ApprovalDecision? @map("reviewed_decision")
+  reviewedAt       DateTime?         @map("reviewed_at") @db.Timestamptz(6)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  awardedAt        DateTime?         @map("awarded_at") @db.Timestamptz(6)
+
+  group     Group     @relation(fields: [groupId], references: [id])
+  challenge Challenge @relation(fields: [challengeId], references: [id])
+  user      User      @relation("ChallengeAttemptUser", fields: [userId], references: [id])
+  reviewer  User?     @relation("ChallengeAttemptReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@index([groupId, userId, challengeId, createdAt(sort: Desc)])
+  @@map("challenge_attempts")
 }

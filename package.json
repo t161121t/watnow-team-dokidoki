@@ -15,6 +15,8 @@
     "db:check": "tsx scripts/check-db.ts",
     "db:sql": "tsx scripts/apply-sql.ts",
     "db:setup": "prisma migrate deploy && npm run db:sql",
+    "verify:rls": "tsx scripts/verify-rls.mts",
+    "verify:auction": "tsx scripts/verify-auction-flow.mts",
     "setup": "npm install && npm run db:check"
   },
   "dependencies": {
