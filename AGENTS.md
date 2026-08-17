@@ -90,6 +90,7 @@
 | `npm run dev` | 開発サーバー起動 |
 | `npm run build` | 本番ビルド |
 | `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:dev` | ローカル Prisma Postgres を起動（Supabase に繋がない場合の代替） |
 | `npm run db:generate` | Prisma Client を再生成（スキーマ変更後に実行） |
 | `npm run db:migrate` | `prisma migrate dev`（マイグレーション作成・適用） |
@@ -100,7 +101,7 @@
 | `npm run verify:rls` | `withRlsContext` がRLSを正しく効かせるかを実DBで検証（テストユーザーを作成・削除） |
 | `npm run verify:auction` | 出品〜入札〜落札確定（次点繰り上げ含む）を実DBで通しで検証 |
 
-lint / typecheck（`npx tsc --noEmit`）/ build は導入済み。test は未導入。
+lint / typecheck（`npm run typecheck`）/ build は導入済み。test は未導入。PR作成時に `.github/workflows/ci.yml` で lint / typecheck / build を自動実行する（テストフレームワーク未導入のため test は含まない。導入判断は `docs/技術選定.md` §5 参照）。
 
 <!-- BEGIN:nextjs-agent-rules -->
 
