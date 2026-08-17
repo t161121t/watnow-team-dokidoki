@@ -212,6 +212,8 @@ model WalletLedger {
   user   User   @relation("WalletLedgerUser", fields: [userId], references: [id])
   actor  User?  @relation("WalletLedgerCreatedBy", fields: [createdBy], references: [id])
 
+  challengeAttempts ChallengeAttempt[]
+
   @@index([groupId, userId, createdAt(sort: Desc)])
   @@index([kind, refTable, refId])
   @@map("wallet_ledger")
@@ -353,10 +355,11 @@ model ChallengeAttempt {
   updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   awardedAt        DateTime?         @map("awarded_at") @db.Timestamptz(6)
 
-  group     Group     @relation(fields: [groupId], references: [id])
-  challenge Challenge @relation(fields: [challengeId], references: [id])
-  user      User      @relation("ChallengeAttemptUser", fields: [userId], references: [id])
-  reviewer  User?     @relation("ChallengeAttemptReviewedBy", fields: [reviewedBy], references: [id])
+  group         Group         @relation(fields: [groupId], references: [id])
+  challenge     Challenge     @relation(fields: [challengeId], references: [id])
+  user          User          @relation("ChallengeAttemptUser", fields: [userId], references: [id])
+  reviewer      User?         @relation("ChallengeAttemptReviewedBy", fields: [reviewedBy], references: [id])
+  awardedLedger WalletLedger? @relation(fields: [awardedLedgerId], references: [id])
 
   @@index([groupId, userId, challengeId, createdAt(sort: Desc)])
   @@map("challenge_attempts")

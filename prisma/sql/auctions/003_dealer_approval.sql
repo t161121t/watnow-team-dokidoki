@@ -1,4 +1,8 @@
 -- docs/DB.md §6.3, §10.0
+-- 2026-08-18レビュー反映: dealer_id = auth.uid() だけでなく、現在も active member で
+-- あることを確認する（割り当て後に脱退/kickされたユーザーが承認/辞退できてしまうため）。
+-- 辞退料の基準は secret_group_items.asking_price（再出品後は古い値になりうる）ではなく、
+-- このオークション自体の listing_prepay_amount（listing時に確定した実際の価格基準）を使う。
 
 CREATE OR REPLACE FUNCTION approve_dealer_assignment(p_auction_id uuid)
 RETURNS auctions
@@ -20,6 +24,10 @@ BEGIN
 
   IF v_auction.dealer_id <> auth.uid() THEN
     RAISE EXCEPTION 'approve_dealer_assignment: not authorized';
+  END IF;
+
+  IF NOT is_group_member(v_auction.group_id) THEN
+    RAISE EXCEPTION 'approve_dealer_assignment: not an active member of this group';
   END IF;
 
   SELECT auction_open_seconds INTO v_open_seconds FROM groups WHERE id = v_auction.group_id;
@@ -48,7 +56,6 @@ SET search_path = public
 AS $$
 DECLARE
   v_auction auctions;
-  v_asking_price int;
   v_fee int;
   v_new_dealer uuid;
 BEGIN
@@ -64,9 +71,12 @@ BEGIN
     RAISE EXCEPTION 'decline_dealer: not authorized';
   END IF;
 
-  SELECT asking_price INTO v_asking_price FROM secret_group_items WHERE id = v_auction.secret_group_item_id;
+  IF NOT is_group_member(v_auction.group_id) THEN
+    RAISE EXCEPTION 'decline_dealer: not an active member of this group';
+  END IF;
+
   -- P12確定=5%。features/auctions/constants.ts の dealerDeclineFeeRate と一致させること
-  v_fee := floor(v_asking_price * 0.05);
+  v_fee := floor(v_auction.listing_prepay_amount * 0.05);
 
   IF v_fee > 0 THEN
     PERFORM _debit_wallet(v_auction.group_id, auth.uid(), v_fee, 'dealer_decline_fee', 'auctions', v_auction.id, true);

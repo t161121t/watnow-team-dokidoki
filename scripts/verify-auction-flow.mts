@@ -7,7 +7,7 @@
  */
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
-import { withRlsContext } from "@/lib/db/rls";
+import { withRlsContext, withServiceRole } from "@/lib/db/rls";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -90,15 +90,21 @@ async function main() {
   // bidder1が別グループ相当で使い込んだ想定で、残高を100まで下げる（150払えなくする）
   await prisma.wallet.update({ where: { groupId_userId: { groupId, userId: bidder1 } }, data: { balance: 100 } });
 
-  // 終了時刻を過去にして確定処理を実行
-  await prisma.auction.update({ where: { id: auctionId }, data: { endsAt: new Date(Date.now() - 1000) } });
+  // 開始・終了時刻を両方過去にして確定処理を実行
+  // （auctions_starts_ends_consistency CHECK制約: starts_at < ends_at を満たす必要がある）
+  await prisma.auction.update({
+    where: { id: auctionId },
+    data: { startsAt: new Date(Date.now() - 2000), endsAt: new Date(Date.now() - 1000) },
+  });
 
-  const claimed = await withRlsContext(seller, (tx) =>
+  // claim_auction_for_finalize/finalize_auction は authenticated へGRANTしていない
+  // （service role専用。2026-08-18 PRレビュー反映）ため withServiceRole で叩く
+  const claimed = await withServiceRole((tx) =>
     tx.$queryRaw<{ claim_auction_for_finalize: boolean }[]>`SELECT claim_auction_for_finalize(${auctionId}::uuid)`,
   );
   assert(claimed[0].claim_auction_for_finalize === true, "claim_auction_for_finalize が成功する");
 
-  await withRlsContext(seller, (tx) => tx.$executeRaw`SELECT finalize_auction(${auctionId}::uuid)`);
+  await withServiceRole((tx) => tx.$executeRaw`SELECT finalize_auction(${auctionId}::uuid)`);
 
   const finalAuction = await prisma.auction.findUniqueOrThrow({ where: { id: auctionId } });
   assert(finalAuction.status === "sold", "finalize_auctionでsoldになる");

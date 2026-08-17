@@ -1,5 +1,7 @@
 -- docs/DB.md §6.1 search_users
 -- 2026-08-17レビュー反映: group admin限定・最低2文字・最大20件・既存メンバー除外
+-- 2026-08-18レビュー反映: ILIKEのワイルドカード（%, _）をエスケープしないと、
+-- "%%"のような2文字クエリが無条件一致になり最低文字数の意図を回避できたため修正
 
 CREATE OR REPLACE FUNCTION search_users(p_group_id uuid, p_query text)
 RETURNS TABLE (id uuid, nickname text, avatar_path text)
@@ -7,6 +9,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_escaped text;
 BEGIN
   IF NOT is_group_admin(p_group_id) THEN
     RAISE EXCEPTION 'search_users: not authorized';
@@ -16,10 +20,12 @@ BEGIN
     RAISE EXCEPTION 'search_users: query must be at least 2 characters';
   END IF;
 
+  v_escaped := replace(replace(replace(p_query, '\', '\\'), '%', '\%'), '_', '\_');
+
   RETURN QUERY
   SELECT u.id, u.nickname, u.avatar_path
   FROM users u
-  WHERE u.nickname ILIKE '%' || p_query || '%'
+  WHERE u.nickname ILIKE '%' || v_escaped || '%' ESCAPE '\'
     AND NOT EXISTS (
       SELECT 1 FROM group_members gm
       WHERE gm.group_id = p_group_id

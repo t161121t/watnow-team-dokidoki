@@ -1,5 +1,8 @@
 -- docs/DB.md §6.1 leave_group / update_group_member_role / kick_group_member
 -- 「active adminが最低1人残る」はここで保証する（check constraintでは表現できないため）
+-- 2026-08-18レビュー反映: 進行中オークションに関与中（出品者/ディーラー/有効な入札者）の
+-- ユーザーは脱退・kickできない（has_active_auction_involvement、common/001参照）。
+-- 脱退直後にwalletがexpiredになり、finalize/decline処理が破綻するのを防ぐ
 
 CREATE OR REPLACE FUNCTION leave_group(p_group_id uuid)
 RETURNS void
@@ -17,6 +20,10 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'leave_group: not an active member of this group';
+  END IF;
+
+  IF has_active_auction_involvement(p_group_id, auth.uid()) THEN
+    RAISE EXCEPTION 'leave_group: cannot leave while involved in an active auction (seller, dealer, or bidder)';
   END IF;
 
   IF v_role = 'admin' THEN
@@ -100,6 +107,10 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'kick_group_member: target is not an active member';
+  END IF;
+
+  IF has_active_auction_involvement(p_group_id, p_user_id) THEN
+    RAISE EXCEPTION 'kick_group_member: target is involved in an active auction (seller, dealer, or bidder)';
   END IF;
 
   IF v_target_role = 'admin' THEN

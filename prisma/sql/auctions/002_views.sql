@@ -4,6 +4,10 @@
 -- bidder_identified_view / anonymous_bid_feed_view は dealer_decline_history_view と
 -- 同種の「本人限定テーブルをviewで横断参照する」パターンであり、DB.md上はview設計として
 -- 承認済みだが、WHERE句を書き間違えるリスクは同じ種類なので実装レビュー時に要注意。
+--
+-- 2026-08-18レビュー反映: bidder_identified_view は seller_id/dealer_id の一致だけで
+-- 判定しており、脱退/kick後も記録上のseller/dealerとして永続的に入札者を閲覧できて
+-- しまっていた。is_group_member(現在activeか)も条件に加える。
 
 CREATE OR REPLACE VIEW auction_public_view AS
 SELECT
@@ -36,7 +40,8 @@ SELECT
 FROM bids b
 JOIN auctions a ON a.id = b.auction_id
 JOIN users u ON u.id = b.bidder_id
-WHERE a.seller_id = auth.uid() OR a.dealer_id = auth.uid();
+WHERE is_group_member(a.group_id)
+  AND (a.seller_id = auth.uid() OR a.dealer_id = auth.uid());
 
 CREATE OR REPLACE VIEW anonymous_bid_feed_view AS
 SELECT

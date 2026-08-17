@@ -1,6 +1,12 @@
 -- docs/DB.md §6.2, §10.0
 -- listed化、auctions行作成（status=pending_dealer_approval、starts_at/ends_atはnull）、
 -- dealerランダム選抜、前払いcredit（P4=出品価格と同額）
+--
+-- 2026-08-18 PRレビュー反映:
+-- - 脱退/kick後でも旧owner権限だけでlistできてしまったため is_group_member を追加
+-- - soft delete済み(deleted_at)のsecretをlistできてしまったため除外
+-- - no_sale後returnedになったitemを再出品できなかったため registered/returned 両方を許可し、
+--   価格基準は asking_price ではなく current_value（目減り後の価値）を使う
 
 CREATE OR REPLACE FUNCTION list_secret_for_auction(p_secret_group_item_id uuid)
 RETURNS auctions
@@ -11,7 +17,9 @@ AS $$
 DECLARE
   v_item secret_group_items;
   v_seller_id uuid;
+  v_deleted_at timestamptz;
   v_dealer_id uuid;
+  v_price int;
   v_auction auctions;
 BEGIN
   SELECT sgi.* INTO v_item
@@ -22,15 +30,27 @@ BEGIN
     RAISE EXCEPTION 'list_secret_for_auction: not found';
   END IF;
 
-  SELECT s.owner_id INTO v_seller_id FROM secrets s WHERE s.id = v_item.secret_id;
+  SELECT s.owner_id, s.deleted_at INTO v_seller_id, v_deleted_at
+  FROM secrets s WHERE s.id = v_item.secret_id;
 
   IF v_seller_id <> auth.uid() THEN
     RAISE EXCEPTION 'list_secret_for_auction: not authorized';
   END IF;
 
-  IF v_item.status <> 'registered' THEN
-    RAISE EXCEPTION 'list_secret_for_auction: item is not in registered status';
+  IF NOT is_group_member(v_item.group_id) THEN
+    RAISE EXCEPTION 'list_secret_for_auction: not a member of this group';
   END IF;
+
+  IF v_deleted_at IS NOT NULL THEN
+    RAISE EXCEPTION 'list_secret_for_auction: secret has been deleted';
+  END IF;
+
+  IF v_item.status NOT IN ('registered', 'returned') THEN
+    RAISE EXCEPTION 'list_secret_for_auction: item is not in registered or returned status';
+  END IF;
+
+  -- registeredなら asking_price、returned（再出品）なら目減り後の current_value を基準にする
+  v_price := v_item.current_value;
 
   -- P8: 出品者以外からランダムにディーラーを選抜
   SELECT gm.user_id INTO v_dealer_id
@@ -45,19 +65,19 @@ BEGIN
     RAISE EXCEPTION 'list_secret_for_auction: no eligible dealer in this group';
   END IF;
 
-  -- P3: 開始価格 = 出品価格と同額
+  -- P3: 開始価格 = （再出品後の）出品価格と同額
   INSERT INTO auctions (
     id, group_id, secret_group_item_id, seller_id, dealer_id, status,
     starting_price, current_price, listing_prepay_amount, created_at, updated_at
   ) VALUES (
     gen_random_uuid(), v_item.group_id, v_item.id, v_seller_id, v_dealer_id, 'pending_dealer_approval',
-    v_item.asking_price, v_item.asking_price, v_item.asking_price, now(), now()
+    v_price, v_price, v_price, now(), now()
   ) RETURNING * INTO v_auction;
 
   UPDATE secret_group_items SET status = 'listed', updated_at = now() WHERE id = v_item.id;
 
-  -- P4: 前払い = 出品価格と同額（100%）
-  PERFORM _credit_wallet(v_item.group_id, v_seller_id, v_item.asking_price, 'listing_prepay', 'secret_group_items', v_item.id);
+  -- P4: 前払い = （再出品後の）出品価格と同額（100%）
+  PERFORM _credit_wallet(v_item.group_id, v_seller_id, v_price, 'listing_prepay', 'secret_group_items', v_item.id);
 
   RETURN v_auction;
 END;
