@@ -17,8 +17,10 @@ PostgreSQL Functions（RPC）・RLS ポリシー・trigger など、Prisma の�
 
 ```bash
 npx prisma migrate deploy   # schema.prisma 由来のテーブル定義を適用
-npm run db:sql              # prisma/sql/**/*.sql をドメイン名の辞書順・ファイル名の辞書順に適用
+npm run db:sql              # prisma/sql/**/*.sql を適用（common/ を最優先、他はドメイン名の辞書順。ファイルはドメイン内で辞書順）
 ```
+
+`common/` は他ドメインのRLS/RPCが参照する共通ヘルパー（`is_group_member()`等）を持つため、辞書順に関係なく必ず最初に適用される（`scripts/apply-sql.ts` の `PRIORITY_DOMAINS` 参照）。
 
 `npm run db:setup` はこの両方を実行する（`scripts/apply-sql.ts` 参照）。
 
