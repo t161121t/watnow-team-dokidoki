@@ -1,6 +1,6 @@
 # DB 設計 — 秘密オークション（仮）
 
-ステータス: 設計ドラフト v3（MVPスコープ削減を反映。2026-08-17）  
+ステータス: 設計ドラフト v4（テーブル統合・正規化見直しを反映。2026-08-17）  
 作成日: 2026-08-16  
 更新日: 2026-08-17  
 対象: Supabase PostgreSQL / Auth / Realtime / Storage  
@@ -19,6 +19,14 @@ v3 での主な変更点（ハッカソンMVP向けスコープ削減。§14参�
 - `group_auction_settings` テーブルを廃止。P2（`auction_open_seconds`）のみ `groups` にカラムとして持ち、他の固定値はアプリ定数化（§4.5）
 - チャレンジ承認を単一承認に確定（`required_approvals` カラム廃止。§4.14、§6.4）
 - 次点繰り上げ（§10.2.1）・落札確定の2段階化（§10.2）は維持（変更なし）
+
+v4 での主な変更点（テーブル統合。DB-13参照）:
+
+- `secret_accesses` を廃止し `auctions.winner_id` に統合（冗長データの解消。§4.12）
+- `dealer_declines` を廃止し `wallet_ledger`（`kind='dealer_decline_fee'`）に統合。代わりに出品者向けの `dealer_decline_history_view` を新設（§4.13、§5.5）
+- `challenge_approvals` を廃止し `challenge_attempts.reviewed_by`/`reviewed_decision`/`reviewed_at` に統合（単一承認確定に伴う自然な帰結。§4.16）
+- `secret_group_items.seller_id` を削除（`secrets.owner_id` への3NF違反的な冗長列だったため。§4.9）
+- テーブル数: 17見出し（廃止済みの欠番5つ: group_invites, group_auction_settings, secret_accesses, dealer_declines, challenge_approvals・任意追加のstorage_objects_metaを含む）→ 実質11テーブル（+ 任意でstorage_objects_meta）。内訳: users, groups, group_members, wallets, wallet_ledger, secrets, secret_group_items, auctions, bids, challenges, challenge_attempts
 
 ---
 
@@ -57,12 +65,10 @@ v3 での主な変更点（ハッカソンMVP向けスコープ削減。§14参�
 - `wallets`
 - `wallet_ledger`
 - `secret_group_items`
-- `auctions`
+- `auctions`（旧 `secret_accesses` の閲覧権情報を含む。§4.12）
 - `bids`
-- `secret_accesses`
 - `challenges`
-- `challenge_attempts`
-- `challenge_approvals`
+- `challenge_attempts`（旧 `challenge_approvals` の承認情報を含む。§4.16）
 
 RLS と PostgreSQL Function の冒頭チェックで二重防御する。
 
@@ -108,18 +114,16 @@ secrets
 
 auctions
   1 ─ * bids
-  1 ─ * secret_accesses
-  1 ─ * dealer_declines
+  （winner_id が閲覧権の正本。旧 secret_accesses）
 
 groups
   1 ─ * challenges
   1 ─ * challenge_attempts
-
-challenge_attempts
-  1 ─ * challenge_approvals
+  （reviewed_by が承認者。旧 challenge_approvals）
 
 wallets
   1 ─ * wallet_ledger
+  （kind = 'dealer_decline_fee' の行が旧 dealer_declines 相当）
 ```
 
 ---
@@ -392,7 +396,7 @@ RLS:
 RLS:
 
 - owner は select / insert / update / delete 可。ただし出品前のみ更新・削除可
-- 落札者は `secret_accesses` 経由の read view から本文閲覧可
+- 落札者は `auctions.winner_id` を経由した read view（`my_secret_collection_view`、§5.4）から本文閲覧可
 - 直接 `secrets` をグループメンバー全員に公開しない
 
 ---
@@ -409,7 +413,6 @@ RLS:
 | `id`                | `uuid`               | PK                                      |
 | `secret_id`         | `uuid`               | FK `secrets.id`                         |
 | `group_id`          | `uuid`               | FK `groups.id`                          |
-| `seller_id`         | `uuid`               | FK `users.id`。基本は `secrets.owner_id` |
 | `status`            | `secret_item_status` | not null                                |
 | `asking_price`      | `int`                | 出品者の自己設定価格                              |
 | `current_value`     | `int`                | 不落札目減り後の価値                              |
@@ -418,17 +421,18 @@ RLS:
 
 DB-4 確定（AI validation は MVP 対象外）のため `validation_status` / `validation_note` は持たない。Phase 2 で AI validation を実装する際にカラム追加のマイグレーションを行う。
 
+**2026-08-17: `seller_id` 列を削除**（3NF違反の解消）。MVPでは複数人出品（権利委譲・共同出品）はPhase 2スコープ外のため、出品者は常に `secrets.owner_id` と一致する。冗長な列として持たず、`secrets` への join で参照する（`DB-review.md` 指摘5への対応でもある）。
+
 制約:
 
 - unique `(secret_id, group_id)`
 - `asking_price >= 0`
 - `current_value >= 0`
-- `seller_id` は active group member
 
 RLS:
 
 - group member は本文を含まない metadata を select 可
-- seller は自分の item を管理可。ただし listed 以降の変更は RPC で制限
+- 出品者（`secrets.owner_id` と一致する本人）は自分の item を管理可。ただし listed 以降の変更は RPC で制限
 - insert は `register_secret` / `publish_secret_to_group` RPC 経由
 
 ---
@@ -447,15 +451,15 @@ P1 確定（ディーラー承認によるイベント駆動）により、`star
 | `id`                          | `uuid`           | PK                                                    |
 | `group_id`                    | `uuid`           | FK `groups.id`                                        |
 | `secret_group_item_id`        | `uuid`           | FK `secret_group_items.id`                            |
-| `seller_id`                   | `uuid`           | FK `users.id`                                      |
-| `dealer_id`                   | `uuid`           | FK `users.id`。辞退のたびに再割当で更新される（履歴は `dealer_declines`） |
+| `seller_id`                   | `uuid`           | FK `users.id`。`secret_group_items`経由で導出可能な冗長列だが、`place_bid`の制約チェック（`bidder_id <> seller_id`）のホットパスで毎回joinを避けるため意図的に非正規化（2026-08-17検討・維持） |
+| `dealer_id`                   | `uuid`           | FK `users.id`。辞退のたびに再割当で更新される（履歴は `wallet_ledger`。`kind = 'dealer_decline_fee'`。§4.13） |
 | `status`                      | `auction_status` | not null。既定 `pending_dealer_approval`                 |
 | `starting_price`              | `int`            | not null                                              |
 | `current_price`               | `int`            | not null                                              |
 | `dealer_approved_at`          | `timestamptz`    | nullable。承認時刻                                        |
 | `starts_at`                   | `timestamptz`    | nullable。承認時に確定（`= dealer_approved_at`）                |
 | `ends_at`                     | `timestamptz`    | nullable。承認時に確定（`= starts_at + auction_open_seconds`） |
-| `winner_id`                   | `uuid`           | nullable                                              |
+| `winner_id`                   | `uuid`           | nullable。**閲覧権の正本**（旧 `secret_accesses`。§4.12）。`status='sold'` かつこの列 = 該当ユーザーなら本文閲覧可 |
 | `winning_bid_id`              | `uuid`           | nullable                                              |
 | `final_price`                 | `int`            | nullable                                              |
 | `listing_prepay_amount`       | `int`            | P4 の実値（= `starting_price`。出品確定時に確定）                    |
@@ -534,59 +538,27 @@ RLS:
 
 
 
-### 4.12 `secret_accesses`
+### 4.12 `secret_accesses`（2026-08-17 廃止・`auctions` に統合）
 
-落札後の閲覧権。コレクション表示の正本。
+落札後の閲覧権は `auctions.winner_id` + `auctions.status = 'sold'` で表現する（§4.10）。理由: MVPでは勝者は最大1人、かつ owner本人の閲覧は既に `secrets.owner_id` で別途担保されているため、独立したテーブルとして持つ情報が `auctions` の既存列と完全に重複していた（`secret_accesses.user_id` は常に `auctions.winner_id` と一致する、典型的な冗長データ）。
 
+`granted_at` は `auctions.finalized_at` を使う。本文閲覧は `my_secret_collection_view`（§5.4）が `auctions` を直接参照する形に変更。
 
-| カラム                    | 型             | 制約 / 用途                    |
-| ---------------------- | ------------- | -------------------------- |
-| `id`                   | `uuid`        | PK                         |
-| `group_id`             | `uuid`        | FK `groups.id`             |
-| `secret_id`            | `uuid`        | FK `secrets.id`            |
-| `secret_group_item_id` | `uuid`        | FK `secret_group_items.id` |
-| `auction_id`           | `uuid`        | FK `auctions.id`           |
-| `user_id`              | `uuid`        | FK `users.id`           |
-| `granted_at`           | `timestamptz` | not null                   |
-
-
-制約:
-
-- unique `(auction_id, user_id)`
-- winner にのみ作成
-- owner 本人の閲覧は `secrets.owner_id` で認めるため、owner 用 access 行は不要
-
-RLS:
-
-- user は自分の access を select 可
-- 本文閲覧は `my_secret_collection_view` / RPC で `secret_accesses` を確認して返す
+このセクション番号は他章からの参照を壊さないため欠番として残す。
 
 ---
 
 
 
-### 4.13 `dealer_declines`
+### 4.13 `dealer_declines`（2026-08-17 廃止・`wallet_ledger` に統合）
 
-ディーラー辞退履歴。P12 確定（出品価格の 5%・完全没収・開始前のみ辞退可）に伴い実値が決まった。`decline_dealer` は `auctions.status = 'pending_dealer_approval'` の場合のみ許可し、`open` 以降は拒否する。
+このテーブルが持っていた情報（`fee_amount`, `wallet_ledger_id`）は、実質的に `wallet_ledger` の1行（`kind = 'dealer_decline_fee'`, `ref_table = 'auctions'`, `ref_id = auction_id`, `user_id = dealer_id`, `amount = -fee_amount`）そのものであり、`wallet_ledger_id` は既存の `wallet_ledger` 行を指すタグでしかなかった。`wallet_ledger` の汎用参照列（`ref_table`/`ref_id`）で同じ情報を表現できるため、テーブルを分ける必要がないと判断し廃止。
 
+辞退料はグループへの還元やプールを行わず、`wallet_ledger` 上で `dealer_decline_fee` として debit するのみ（完全没収。credit 側の行は作らない）。再割当の回数上限はなし。`decline_dealer` は `auctions.status = 'pending_dealer_approval'` の場合のみ許可し、`open` 以降は拒否する（P12確定）。
 
-| カラム                | 型             | 制約 / 用途                                    |
-| ------------------ | ------------- | ------------------------------------------- |
-| `id`               | `uuid`        | PK                                           |
-| `group_id`         | `uuid`        | FK `groups.id`                               |
-| `auction_id`       | `uuid`        | FK `auctions.id`                             |
-| `dealer_id`        | `uuid`        | FK `users.id`                             |
-| `fee_amount`       | `int`         | 辞退料。`secret_group_items.asking_price * 0.05` |
-| `wallet_ledger_id` | `uuid`        | FK `wallet_ledger.id`                        |
-| `created_at`       | `timestamptz` | not null                                     |
+**トレードオフ**: `wallet_ledger` のRLSは「本人のみselect可」のため、このままでは出品者が自分のオークションの辞退履歴を見られない。`dealer_decline_history_view`（§5.5、新設）で auction 関係者に限定して見せる。
 
-
-辞退料はグループへの還元やプールを行わず、`wallet_ledger` 上は `dealer_decline_fee` として debit するのみ（完全没収。credit 側の行は作らない）。再割当の回数上限はなし。
-
-RLS:
-
-- auction 関係者と admin は select 可
-- insert は `decline_dealer` RPC のみ
+このセクション番号は他章からの参照を壊さないため欠番として残す。
 
 ---
 
@@ -642,6 +614,9 @@ RLS:
 | `evidence_path`     | `text`           | Storage path          |
 | `reward_points`     | `int`            | 承認時点の実値を保存            |
 | `awarded_ledger_id` | `uuid`           | FK `wallet_ledger.id` |
+| `reviewed_by`       | `uuid`           | nullable。FK `users.id`。承認/却下した人（2026-08-17 `challenge_approvals` 統合により追加） |
+| `reviewed_decision` | `approval_decision` | nullable                          |
+| `reviewed_at`       | `timestamptz`    | nullable               |
 | `created_at`        | `timestamptz`    | not null              |
 | `updated_at`        | `timestamptz`    | not null              |
 | `awarded_at`        | `timestamptz`    | nullable              |
@@ -650,40 +625,24 @@ RLS:
 制約:
 
 - `user_id` は active group member
+- `reviewed_by <> user_id`（自己承認不可）
+- `reviewed_by` は同 group の active member
 - cooldown / 獲得上限は `submit_challenge` RPC で確認
 
 RLS:
 
 - group member は同 group の attempt 進捗を select 可
-- insert / status update は RPC のみ
+- insert / status update / reviewed_* の更新は RPC のみ
 
 ---
 
 
 
-### 4.16 `challenge_approvals`
+### 4.16 `challenge_approvals`（2026-08-17 廃止・`challenge_attempts` に統合）
 
-複数人承認の記録。　
+チャレンジ承認を単一承認（誰か1人が承認したら即付与）に確定したため、複数人分の承認を集計する必要がなくなった。`reviewed_by` / `reviewed_decision` / `reviewed_at` を `challenge_attempts` に直接持たせれば十分（§4.15）。複数人承認クオラムが必要になったらPhase 2でこのテーブルを復活させる。
 
-
-| カラム           | 型                   | 制約 / 用途                              |
-| ------------- | ------------------- | ------------------------------------ |
-| `attempt_id`  | `uuid`              | PK part / FK `challenge_attempts.id` |
-| `approver_id` | `uuid`              | PK part / FK `users.id`           |
-| `decision`    | `approval_decision` | not null                             |
-| `created_at`  | `timestamptz`       | not null                             |
-
-
-制約:
-
-- unique `(attempt_id, approver_id)`
-- `approver_id <> challenge_attempts.user_id`
-- `approver_id` は同 group の active member
-
-RLS:
-
-- group member は同 group の approvals を select 可
-- insert は `approve_challenge` RPC のみ
+このセクション番号は他章からの参照を壊さないため欠番として残す。
 
 ---
 
@@ -794,12 +753,31 @@ RLS / view 条件:
 - `summary`
 - `body`
 - `seller_id`
-- `granted_at`
+- `granted_at`（`auctions.finalized_at`）
 
-条件:
+条件（2026-08-17: `secret_accesses` 廃止に伴い変更）:
 
-- `secret_accesses.user_id = auth.uid()`
+- `auctions.winner_id = auth.uid() AND auctions.status = 'sold'`
 - または `secrets.owner_id = auth.uid()` の本人閲覧
+
+
+
+### 5.5 `dealer_decline_history_view`（新設。旧 `dealer_declines` の代替）
+
+出品者・admin向け。自分のオークションでディーラーが辞退した履歴を見せる（`wallet_ledger` は本人のみ select 可のため、この view 経由でのみ横断参照できる）。
+
+含める:
+
+- `auction_id`
+- `dealer_id`
+- `fee_amount`（`wallet_ledger.amount` の絶対値）
+- `declined_at`（`wallet_ledger.created_at`）
+
+view定義の条件:
+
+- `wallet_ledger.kind = 'dealer_decline_fee'`
+- `wallet_ledger.ref_table = 'auctions'` を `auctions.id = wallet_ledger.ref_id` で join
+- `auctions.seller_id = auth.uid()` または admin
 
 ---
 
@@ -848,9 +826,9 @@ RLS / view 条件:
 | `approve_dealer_assignment(auction_id)`     | 割り当てられた dealer 本人のみ実行可。`pending_dealer_approval` → `open`。`starts_at = now()`、`ends_at = now() + groups.auction_open_seconds` を確定（P1・P2） |
 | `place_bid(auction_id, amount)`             | 所属・状態（`open`）・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新                                                    |
 | `claim_auction_for_finalize(auction_id)`    | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照）                                |
-| `finalize_auction(auction_id)`              | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit（P7）、閲覧権付与、status 更新（Stage B） |
+| `finalize_auction(auction_id)`              | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit（P7）、`auctions.winner_id` 確定（= 閲覧権付与。旧 secret_accesses insert は不要）、status 更新（Stage B） |
 | `finalize_due_auctions()`                   | cron 用。`claim_auction_for_finalize` → `finalize_auction` を終了済み open auction にまとめて適用                          |
-| `decline_dealer(auction_id)`                | 割り当てられた dealer 本人のみ、`status = pending_dealer_approval` の間だけ実行可。辞退料（出品価格の5%）debit、dealer_declines 追加、dealer 再選抜（P12）。`status` は `pending_dealer_approval` のまま |
+| `decline_dealer(auction_id)`                | 割り当てられた dealer 本人のみ、`status = pending_dealer_approval` の間だけ実行可。辞退料（出品価格の5%）を `_debit_wallet`（`kind = 'dealer_decline_fee'`）で debit、dealer 再選抜（P12）。`status` は `pending_dealer_approval` のまま。旧 `dealer_declines` insert は不要（`wallet_ledger` に一本化） |
 
 `open_due_auctions()` は P1 の仕様変更（固定待機時間の廃止）により不要になったため削除した。オークション開始はディーラーの `approve_dealer_assignment` 呼び出しのみで起こり、タイムアウト監視の cron は設けない（P1 確定：タイムアウトなし）。
 
@@ -875,7 +853,7 @@ RLS / view 条件:
 | RPC                                                       | 責務                                 |
 | --------------------------------------------------------- | ---------------------------------- |
 | `submit_challenge(group_id, challenge_id, evidence_path)` | 所属・cooldown・上限を確認して attempt 作成     |
-| `approve_challenge(attempt_id, decision)`                 | 自己承認不可（`approver_id <> challenge_attempts.user_id`）。単一承認（2026-08-17確定）: `decision = 'approved'` の1件目の承認記録と同時に `attempt.status = awarded` にして即 wallet credit。以降の承認呼び出しは冪等に無視（二重付与防止） |
+| `approve_challenge(attempt_id, decision)`                 | 自己承認不可（`reviewed_by <> challenge_attempts.user_id`）。単一承認（2026-08-17確定）: `challenge_attempts.reviewed_by`/`reviewed_decision`/`reviewed_at` を直接更新（旧 `challenge_approvals` insert は不要）。`decision='approved'` なら同時に `status=awarded`・wallet credit。既に `reviewed_at` が入っている行への再実行は拒否（二重承認防止） |
 | `create_group_challenge(group_id, ...)`                   | admin による group 独自 challenge 作成    |
 
 
@@ -931,12 +909,10 @@ is_group_admin(target_group_id uuid) returns boolean
 | `wallet_ledger`       | 本人のみ                        | wallet RPC               |
 | `secrets`             | owner / access holder       | owner の出品前 RPC           |
 | `secret_group_items`  | 同 group member の metadata   | seller RPC               |
-| `auctions`            | 同 group member              | auction RPC              |
+| `auctions`            | 同 group member（`winner_id`＝本人なら閲覧権あり） | auction RPC              |
 | `bids`                | bidder / seller。その他は匿名 view | `place_bid` RPC          |
-| `secret_accesses`     | 本人                          | `finalize_auction` RPC   |
 | `challenges`          | 同 group member + system     | admin / challenge RPC    |
-| `challenge_attempts`  | 同 group member              | challenge RPC            |
-| `challenge_approvals` | 同 group member              | `approve_challenge` RPC  |
+| `challenge_attempts`  | 同 group member              | challenge RPC（`reviewed_by`更新含む） |
 
 
 ---
@@ -959,11 +935,11 @@ secret_group_items(group_id, status, updated_at desc)
 secret_group_items(secret_id, group_id)
 auctions(group_id, status, starts_at, ends_at)
 auctions(secret_group_item_id)
+auctions(winner_id, group_id, finalized_at desc)
 bids(auction_id, amount desc, created_at asc)
 bids(group_id, bidder_id, created_at desc)
-secret_accesses(user_id, group_id, granted_at desc)
+wallet_ledger(kind, ref_table, ref_id)
 challenge_attempts(group_id, user_id, challenge_id, created_at desc)
-challenge_approvals(attempt_id, approver_id)
 ```
 
 部分 unique 候補:
@@ -1025,11 +1001,12 @@ decline_dealer
      （'open' 以降なら中断。開始後の辞退は不可）
   2. 呼び出しユーザーが auctions.dealer_id 本人であることを確認
   3. dealer wallet を FOR UPDATE
-  4. fee = secret_group_items.asking_price * 0.05（定数。§4.5参照）を debit（allow_negative）
-  5. dealer_declines insert（fee_amount, wallet_ledger_id）
-  6. 出品者以外・現 dealer 以外の active group member からランダムに新 dealer を選抜
-  7. auctions.dealer_id を新 dealer に更新
-  8. auctions.status は 'pending_dealer_approval' のまま
+  4. fee = secret_group_items.asking_price * 0.05（定数。§4.5参照）を
+     _debit_wallet(kind='dealer_decline_fee', ref_table='auctions', ref_id=auction_id) で debit
+     （wallet_ledgerへの記録がそのまま辞退履歴になる。旧dealer_declines insertは不要）
+  5. 出品者以外・現 dealer 以外の active group member からランダムに新 dealer を選抜
+  6. auctions.dealer_id を新 dealer に更新
+  7. auctions.status は 'pending_dealer_approval' のまま
 ```
 
 タイムアウト監視の cron は設けない（P1 確定）。ディーラーが承認も辞退もしない限り、auction は無期限に `pending_dealer_approval` のままになる（運用上のリスクとして `PRD.md` §9 に記載）。
@@ -1083,9 +1060,9 @@ finalize_auction
   6. seller / dealer wallet を FOR UPDATE
   7. winner から final_price debit（追加振込なし。P5 確定）
   8. seller へ final_price * 0.70、dealer へ final_price * 0.30 を credit（P7 確定）
-  9. secret_accesses insert
- 10. secret_group_items.status = sold
- 11. auctions.status = sold、winner_id / winning_bid_id / final_price / seller_share_amount / dealer_share_amount を確定
+  9. secret_group_items.status = sold
+ 10. auctions.status = sold、winner_id / winning_bid_id / final_price / seller_share_amount / dealer_share_amount を確定
+     （winner_id 確定 = 閲覧権付与そのもの。旧 secret_accesses insert は不要）
 ```
 
 
@@ -1142,9 +1119,9 @@ no_sale
 2. users / groups / group_members（`group_invites` は廃止。§4.4参照）
 3. wallets / wallet_ledger / wallet helper
 4. secrets / secret_group_items
-5. auctions / bids / secret_accesses / dealer_declines
-6. challenges / challenge_attempts / challenge_approvals
-7. views
+5. auctions / bids（`secret_accesses` / `dealer_declines` は廃止。§4.12・§4.13参照）
+6. challenges / challenge_attempts（`challenge_approvals` は廃止。§4.16参照）
+7. views（`dealer_decline_history_view` 新設含む。§5.5）
 8. RLS policies
 9. RPC
 10. `lib/auction-constants.ts`（アプリ側の定数。§4.5参照。RPC実装と同時に用意する）
@@ -1198,6 +1175,8 @@ no_sale
 | ~~DB-10~~ | ~~チャレンジ承認を複数人承認クオラムのまま作るか~~ → **解決済み**。単一承認に簡略化 | §4.14、§6.4 |
 | ~~DB-11~~ | ~~`group_auction_settings` をテーブルのまま持つか~~ → **解決済み**。P2のみ`groups`へ、他はアプリ定数化 | §4.2、§4.5 |
 | DB-12 | 次点繰り上げ（§10.2.1）・落札確定2段階化（§10.2）は簡略化せず維持することを確認済み。実装量は増えるままなので、テスト（§13）を優先的に書く | §10.2、§10.2.1 |
+| ~~DB-13~~ | ~~17テーブルは多すぎないか~~ → **解決済み（2026-08-17）**。`secret_accesses`→`auctions`、`dealer_declines`→`wallet_ledger`、`challenge_approvals`→`challenge_attempts` に統合。`secret_group_items.seller_id`（3NF違反の冗長列）も削除 | §4.12、§4.13、§4.16、§4.9 |
+| DB-14 | `dealer_decline_history_view`（§5.5、新設）と `wallet_ledger` の汎用参照列（`ref_table`/`ref_id`）の組み合わせが、他の統合ケースでも今後使えるパターンかどうか。将来同種の「イベントログ的な小テーブル」が増えたら同じ手法で統合を検討する | §5.5 |
 
 
 ---
