@@ -35,6 +35,14 @@ const architectureBoundaries = {
         pattern: "features/*/server/**",
         capture: ["domain"],
       },
+      {
+        // constants.ts / types.ts など、そのドメイン内で共有する
+        // 純粋な値・型の置き場。feature-actions/feature-server より
+        // 後ろに置くことで、actions.{ts,tsx} は先にそちらへマッチする。
+        type: "feature-shared",
+        pattern: "features/*/*.{ts,tsx}",
+        capture: ["domain"],
+      },
       { type: "lib-db", pattern: "lib/db/**" },
       { type: "lib-supabase", pattern: "lib/supabase/**" },
       { type: "lib", pattern: "lib/**" },
@@ -70,6 +78,14 @@ const architectureBoundaries = {
                   },
                 },
               },
+              {
+                to: {
+                  element: {
+                    type: "feature-shared",
+                    captured: { domain: "{{from.domain}}" },
+                  },
+                },
+              },
               { to: { element: { type: "components" } } },
               { to: { element: { type: "lib" } } },
             ],
@@ -85,6 +101,14 @@ const architectureBoundaries = {
                   },
                 },
               },
+              {
+                to: {
+                  element: {
+                    type: "feature-shared",
+                    captured: { domain: "{{from.domain}}" },
+                  },
+                },
+              },
               { to: { element: { type: "lib-db" } } },
               { to: { element: { type: "lib-supabase" } } },
               { to: { element: { type: "lib" } } },
@@ -93,9 +117,21 @@ const architectureBoundaries = {
           {
             from: { element: { type: "feature-server" } },
             allow: [
+              {
+                to: {
+                  element: {
+                    type: "feature-shared",
+                    captured: { domain: "{{from.domain}}" },
+                  },
+                },
+              },
               { to: { element: { type: "lib-db" } } },
               { to: { element: { type: "lib" } } },
             ],
+          },
+          {
+            from: { element: { type: "feature-shared" } },
+            allow: [{ to: { element: { type: "lib" } } }],
           },
           {
             from: { element: { type: "components" } },
