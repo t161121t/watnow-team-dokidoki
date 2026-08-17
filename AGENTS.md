@@ -90,7 +90,7 @@
 | `npm run dev` | 開発サーバー起動 |
 | `npm run build` | 本番ビルド |
 | `npm run lint` | ESLint |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `next typegen`（ルート型生成）+ `tsc --noEmit` |
 | `npm run db:dev` | ローカル Prisma Postgres を起動（Supabase に繋がない場合の代替） |
 | `npm run db:generate` | Prisma Client を再生成（スキーマ変更後に実行） |
 | `npm run db:migrate` | `prisma migrate dev`（マイグレーション作成・適用） |
