@@ -60,14 +60,17 @@ async function main() {
     "allowed_mime_typesが画像形式に制限されている",
   );
 
-  // update/deleteポリシーは意図的に用意していない（immutable運用）
+  // update/delete/selectポリシーは意図的に用意していない（immutable運用 +
+  // public配信は`storage.buckets.public`フラグ側で完結するためRLS不要。
+  // SELECTを許可するとStorage APIの一覧取得でbucket内を列挙できてしまう
+  // ため、あえて用意していない。004_avatars_storage.sql冒頭のコメント参照）。
   const policies = await prisma.$queryRaw<{ policyname: string; cmd: string }[]>`
     SELECT policyname, cmd FROM pg_policies
     WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname LIKE 'avatars_%'
   `;
   assert(
-    policies.every((p) => p.cmd !== "UPDATE" && p.cmd !== "DELETE"),
-    "avatarsにUPDATE/DELETEポリシーが存在しない（immutable運用）",
+    policies.every((p) => p.cmd !== "UPDATE" && p.cmd !== "DELETE" && p.cmd !== "SELECT"),
+    "avatarsにUPDATE/DELETE/SELECTポリシーが存在しない（immutable運用 + public配信はbucket.publicフラグで完結）",
   );
 
   // 自分のフォルダ（先頭パスセグメント = auth.uid()）には書き込める
@@ -97,6 +100,18 @@ async function main() {
     tx.$executeRaw`UPDATE storage.objects SET name = ${`${userA}/renamed.png`} WHERE bucket_id = 'avatars' AND name = ${`${userA}/test.png`}`,
   );
   assert(updatedRows === 0, "自分のフォルダでもUPDATEは0行にしかならない（immutable運用）");
+
+  // SELECTポリシーが無いため、RLS越しでは自分がINSERTした行すら見えない
+  // （0行）。public配信はbucket.publicフラグ側の別経路で行われるため問題ない。
+  const ownRowViaRls = await withRlsContext(userA, (tx) =>
+    tx.$queryRaw<{ name: string }[]>`
+      SELECT name FROM storage.objects WHERE bucket_id = 'avatars' AND name = ${`${userA}/test.png`}
+    `,
+  );
+  assert(
+    ownRowViaRls.length === 0,
+    "RLS越しでは自分のフォルダの行もSELECTできない（一覧取得による列挙を防ぐ）",
+  );
 
   console.log("\nALL CHECKS PASSED");
 }

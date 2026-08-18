@@ -19,6 +19,16 @@
 -- （どちらもRLS: users_update_self / groups_update_admin で守られている）。
 -- createSignedUploadUrlはRLS上INSERT権限のみで完結するため実装上の制約もない
 -- （Supabase公式ドキュメントの `objects table permissions: insert` 参照）。
+--
+-- SELECTポリシーは意図的に用意していない（2026-08-19 レビュー指摘で修正）。
+-- publicバケットの画像配信は`/storage/v1/object/public/{bucket}/{path}`が
+-- `storage.buckets.public`フラグを見て直接配信するため、storage.objectsへの
+-- RLS（SELECT）は不要。逆にSELECTポリシーを許可してしまうと、Storage APIの
+-- 一覧取得やPostgREST経由でstorage.objectsを直接クエリして bucket内の
+-- UIDフォルダ・ランダムファイル名を列挙できてしまい、「ファイル名が推測困難
+-- だからpublicでよい」という設計前提が崩れる。アプリ側もusers.avatar_path /
+-- groups.icon_path（各テーブル自体のRLSで保護済み）経由でpathを知るのみで、
+-- storage.objectsを直接SELECTする経路は必要ない。
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
@@ -33,12 +43,6 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
--- 読み取りはpublicバケットのため誰でも可（未ログインでも画像そのものは表示できる）。
-DROP POLICY IF EXISTS avatars_public_read ON storage.objects;
-CREATE POLICY avatars_public_read ON storage.objects
-  FOR SELECT
-  USING (bucket_id = 'avatars');
-
 -- 書き込み（新規アップロードのみ。上記コメント参照）は自分のフォルダ
 -- （先頭パスセグメント = auth.uid()）のみ。
 DROP POLICY IF EXISTS avatars_owner_insert ON storage.objects;
@@ -50,7 +54,8 @@ CREATE POLICY avatars_owner_insert ON storage.objects
     AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
--- 旧バージョン（このファイルの初期実装）で作成していたupdate/deleteポリシーを
--- 撤去する。immutable運用への変更（このファイル冒頭のコメント参照）。
+-- 旧バージョン（このファイルの初期実装）で作成していたupdate/delete/selectの
+-- ポリシーを撤去する（immutable運用・SELECT不要化への変更。上記コメント参照）。
 DROP POLICY IF EXISTS avatars_owner_update ON storage.objects;
 DROP POLICY IF EXISTS avatars_owner_delete ON storage.objects;
+DROP POLICY IF EXISTS avatars_public_read ON storage.objects;
