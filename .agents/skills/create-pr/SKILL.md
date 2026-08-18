@@ -75,7 +75,7 @@ git push -u origin HEAD
 ### Step 6: PR作成
 
 1. `.github/pull_request_template.md` を読む
-2. 差分に基づき全セクションを埋める（目的 / 方針 / AI usage / テストは必須）
+2. 差分に基づき全セクションを埋める（背景 / 目的 / 方針 / AI usage / テストは必須）
 3. `AI usage` の Tool に実際に使ったエージェントを書く
 4. base はリポジトリのデフォルトブランチ（現状 `main`）
 
