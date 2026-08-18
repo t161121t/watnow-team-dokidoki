@@ -22,8 +22,8 @@ export async function updateSecretBeforeListing(
         ${input.body ?? null},
         ${input.summary ?? null},
         ${input.category ?? null},
-        ${input.rarity ?? null},
-        ${input.askingPrice ?? null}
+        ${input.rarity ?? null}::int,
+        ${input.askingPrice ?? null}::int
       )
     `,
   );

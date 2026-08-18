@@ -13,7 +13,7 @@ export async function registerSecret(
 ): Promise<SecretGroupItemRow> {
   const rows = await withRlsContext(userId, (tx) =>
     tx.$queryRaw<SecretGroupItemRow[]>`
-      SELECT * FROM register_secret(${groupId}::uuid, ${body}, ${summary}, ${category}, ${rarity}, ${askingPrice})
+      SELECT * FROM register_secret(${groupId}::uuid, ${body}, ${summary}, ${category}, ${rarity}::int, ${askingPrice}::int)
     `,
   );
   return rows[0];
