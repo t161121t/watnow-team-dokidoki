@@ -99,6 +99,7 @@
 | `npm run db:sql` | `prisma/sql/**/*.sql`（PostgreSQL Functions・RLSポリシー）を適用 |
 | `npm run db:setup` | `prisma migrate deploy` + `db:sql` をまとめて実行 |
 | `npm run verify:auth` | `create_profile` RPCが実DBで正しく動くかを検証（Magic Linkのメール往復は対象外） |
+| `npm run verify:storage` | `avatars`バケットのRLSが実DBで正しく効くかを検証（実際のアップロードAPI呼び出しは対象外） |
 | `npm run verify:rls` | `withRlsContext` がRLSを正しく効かせるかを実DBで検証（テストユーザーを作成・削除） |
 | `npm run verify:auction` | 出品〜入札〜落札確定（次点繰り上げ含む）を実DBで通しで検証 |
 
