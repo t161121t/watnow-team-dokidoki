@@ -25,8 +25,10 @@ BEGIN
     RAISE EXCEPTION 'create_profile: nickname must not be empty';
   END IF;
 
-  INSERT INTO users (id, nickname, avatar_path)
-  VALUES (auth.uid(), p_nickname, p_avatar_path)
+  -- updated_atはPrisma(@updatedAt)がORM経由の書き込み時にのみ埋める列で、
+  -- DB側にDEFAULTが無い（NOT NULL制約のみ）。生SQLからのINSERTでは明示が必要。
+  INSERT INTO users (id, nickname, avatar_path, updated_at)
+  VALUES (auth.uid(), p_nickname, p_avatar_path, now())
   RETURNING * INTO v_user;
 
   RETURN v_user;

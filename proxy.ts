@@ -1,14 +1,17 @@
 import { type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession } from "@/lib/supabase/proxy";
 
 /**
  * Supabase Authのセッションcookieをリクエストごとにリフレッシュする。
- * Server ComponentはcookieをwriteできないためmiddlewareでのSSR標準パターン。
+ * Server ComponentはcookieをwriteできないためSSRでの標準パターン。
  *
  * 未ログイン時のリダイレクト等の認証ガードは、保護対象のルートが実装されてから追加する
  * （現状 app/ 配下に保護対象のページが無いため、ここでは付けない）。
+ *
+ * Next.js 16でファイル規約が middleware.ts → proxy.ts に変更された
+ * （node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md）。
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   return updateSession(request);
 }
 

@@ -2,10 +2,10 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 /**
- * middleware専用のSupabaseクライアント生成 + セッションリフレッシュ。
- * `createSupabaseServerClient`（同ディレクトリのserver.ts）はNext.jsの`cookies()`
- * （Server Component/Action用）を使うためmiddlewareでは使えない。middlewareは
- * `NextRequest`/`NextResponse`のcookie APIが必要なため、別実装にしている。
+ * proxy.ts（Next.js 16でのmiddleware後継）専用のSupabaseクライアント生成 +
+ * セッションリフレッシュ。`createSupabaseServerClient`（同ディレクトリのserver.ts）は
+ * Next.jsの`cookies()`（Server Component/Action用）を使うためproxyでは使えない。
+ * proxyは`NextRequest`/`NextResponse`のcookie APIが必要なため、別実装にしている。
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request });
