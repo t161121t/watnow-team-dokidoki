@@ -6,6 +6,20 @@ import {
   AVATAR_EXTENSIONS,
   createAvatarUploadUrl,
 } from "@/lib/supabase/storage";
+import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
+import { searchUsers as searchUsersInDb } from "@/features/groups/server/search-users";
+import { inviteMember as inviteMemberInDb } from "@/features/groups/server/invite-member";
+import { acceptInvite as acceptInviteInDb } from "@/features/groups/server/accept-invite";
+import { declineInvite as declineInviteInDb } from "@/features/groups/server/decline-invite";
+import { leaveGroup as leaveGroupInDb } from "@/features/groups/server/leave-group";
+import { updateGroupMemberRole as updateGroupMemberRoleInDb } from "@/features/groups/server/update-group-member-role";
+import { kickGroupMember as kickGroupMemberInDb } from "@/features/groups/server/kick-group-member";
+
+function requireUserId(userId: string | null): asserts userId is string {
+  if (!userId) {
+    throw new Error("ログインが必要です");
+  }
+}
 
 const iconUploadSchema = z.object({
   extension: z.enum(AVATAR_EXTENSIONS),
@@ -14,7 +28,7 @@ const iconUploadSchema = z.object({
 /**
  * グループ作成（④）でのアイコン画像アップロード用に、署名付きアップロードURLを
  * 発行する。UI側は返り値の`signedUrl`に画像ファイルを直接PUTし、その`path`を
- * グループ作成時（issue #38で実装）の`icon_path`に渡す想定。
+ * createGroupの`iconPath`に渡す想定。
  *
  * avatarsバケットをuser avatarと共用している（prisma/sql/common/004_avatars_storage.sql）。
  * pathは呼び出しユーザー自身のフォルダ固定（RLSの制約）で、グループとの紐付けは
@@ -22,10 +36,127 @@ const iconUploadSchema = z.object({
  */
 export async function createGroupIconUploadUrl(input: { extension: string }) {
   const userId = await getCurrentUserId();
-  if (!userId) {
-    throw new Error("ログインが必要です");
-  }
+  requireUserId(userId);
 
   const parsed = iconUploadSchema.parse(input);
   return createAvatarUploadUrl(userId, parsed.extension);
+}
+
+const createGroupSchema = z.object({
+  name: z.string().trim().min(1).max(50),
+  iconPath: z.string().optional(),
+});
+
+/**
+ * グループ作成（④）。作成者は自動でactive adminになり、walletが初期化される
+ * （create_group RPC参照）。
+ */
+export async function createGroup(input: { name: string; iconPath?: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = createGroupSchema.parse(input);
+  return createGroupInDb(userId, parsed.name, parsed.iconPath ?? null);
+}
+
+const searchUsersSchema = z.object({
+  groupId: z.string().uuid(),
+  query: z.string().trim().min(2),
+});
+
+/**
+ * グループ管理（⑤）でのメンバー招待用ニックネーム検索。呼び出しユーザーが
+ * 対象グループのadminであることはsearch_users RPC側が検証する。
+ */
+export async function searchUsers(input: { groupId: string; query: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = searchUsersSchema.parse(input);
+  return searchUsersInDb(userId, parsed.groupId, parsed.query);
+}
+
+const inviteMemberSchema = z.object({
+  groupId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
+/** グループ管理（⑤）でのメンバー招待。admin確認はinvite_member RPC側が行う。 */
+export async function inviteMember(input: { groupId: string; userId: string }) {
+  const currentUserId = await getCurrentUserId();
+  requireUserId(currentUserId);
+
+  const parsed = inviteMemberSchema.parse(input);
+  return inviteMemberInDb(currentUserId, parsed.groupId, parsed.userId);
+}
+
+const groupIdSchema = z.object({ groupId: z.string().uuid() });
+
+/** 招待の確認（③）での承諾。 */
+export async function acceptInvite(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return acceptInviteInDb(userId, parsed.groupId);
+}
+
+/** 招待の確認（③）での辞退。 */
+export async function declineInvite(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return declineInviteInDb(userId, parsed.groupId);
+}
+
+/**
+ * グループ脱退。進行中オークションに関与中（出品者/ディーラー/入札者）の場合や、
+ * 最後のadminの場合はleave_group RPC側が拒否する。
+ */
+export async function leaveGroup(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return leaveGroupInDb(userId, parsed.groupId);
+}
+
+const updateGroupMemberRoleSchema = z.object({
+  groupId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: z.enum(["member", "admin"]),
+});
+
+/**
+ * グループ管理（⑤）でのメンバー役割変更。最後のadminをmemberに降格することは
+ * update_group_member_role RPC側が拒否する。
+ */
+export async function updateGroupMemberRole(input: {
+  groupId: string;
+  userId: string;
+  role: "member" | "admin";
+}) {
+  const currentUserId = await getCurrentUserId();
+  requireUserId(currentUserId);
+
+  const parsed = updateGroupMemberRoleSchema.parse(input);
+  return updateGroupMemberRoleInDb(
+    currentUserId,
+    parsed.groupId,
+    parsed.userId,
+    parsed.role,
+  );
+}
+
+/**
+ * グループ管理（⑤）でのメンバーkick。進行中オークションに関与中の場合や
+ * 最後のadminの場合はkick_group_member RPC側が拒否する。
+ */
+export async function kickGroupMember(input: { groupId: string; userId: string }) {
+  const currentUserId = await getCurrentUserId();
+  requireUserId(currentUserId);
+
+  const parsed = inviteMemberSchema.parse(input);
+  return kickGroupMemberInDb(currentUserId, parsed.groupId, parsed.userId);
 }
