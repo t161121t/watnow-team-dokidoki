@@ -28,4 +28,4 @@ npm run db:sql              # prisma/sql/**/*.sql を適用（common/ を最優�
 
 - 1 ファイル = 1 オブジェクト目安（`place_bid.sql`, `wallets_rls.sql` など）。巨大な1ファイルに詰め込まない
 - 何度実行しても壊れないように書く（`CREATE OR REPLACE FUNCTION`、`DROP POLICY IF EXISTS` → `CREATE POLICY`）
-- ドメインフォルダ（`groups/` `secrets/` `auctions/` `wallet/` `challenges/`）は `features/<domain>/` と対応させる。どのドメインにも属さない共通ヘルパー（例: `is_group_member()`）は `common/` を作って置く
+- ドメインフォルダ（`auth/` `groups/` `secrets/` `auctions/` `wallet/` `challenges/`）は `features/<domain>/` と対応させる。どのドメインにも属さない共通ヘルパー（例: `is_group_member()`）は `common/` を作って置く
