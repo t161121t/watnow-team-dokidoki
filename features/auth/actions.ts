@@ -3,6 +3,10 @@
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createSupabaseServerClient, getCurrentUserId } from "@/lib/supabase/server";
+import {
+  AVATAR_EXTENSIONS,
+  createAvatarUploadUrl as createAvatarUploadUrlInStorage,
+} from "@/lib/supabase/storage";
 import { createProfile } from "@/features/auth/server/create-profile";
 
 const magicLinkSchema = z.object({
@@ -51,6 +55,25 @@ const completeProfileSchema = z.object({
   nickname: z.string().trim().min(1).max(50),
   avatarPath: z.string().optional(),
 });
+
+const avatarUploadSchema = z.object({
+  extension: z.enum(AVATAR_EXTENSIONS),
+});
+
+/**
+ * オンボーディング（①）でのアバター画像アップロード用に、署名付きアップロードURLを
+ * 発行する。UI側は返り値の`signedUrl`に画像ファイルを直接PUTし、その`path`を
+ * completeProfileの`avatarPath`に渡す想定（この関数自体はusers行を更新しない）。
+ */
+export async function createAvatarUploadUrl(input: { extension: string }) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    throw new Error("ログインが必要です");
+  }
+
+  const parsed = avatarUploadSchema.parse(input);
+  return createAvatarUploadUrlInStorage(userId, parsed.extension);
+}
 
 /**
  * オンボーディング（①）でニックネーム・アイコンを入力した後に呼ぶ。
