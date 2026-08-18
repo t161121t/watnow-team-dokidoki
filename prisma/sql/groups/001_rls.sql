@@ -26,7 +26,8 @@ CREATE POLICY users_update_self ON users
   USING (id = auth.uid())
   WITH CHECK (id = auth.uid());
 
--- insert は Supabase Auth のサインアップ後、アプリのオンボーディングRPC（create_profile等。未実装）で行う。
+-- insert は Supabase Auth のサインアップ後、アプリのオンボーディングRPC
+-- （create_profile。prisma/sql/auth/001_create_profile.sql）で行う。
 -- ここでは明示的なINSERTポリシーは定義しない（RPC(SECURITY DEFINER)経由のみ許可）。
 
 ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
