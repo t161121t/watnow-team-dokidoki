@@ -39,11 +39,35 @@ const userB = "00000000-0000-0000-0000-0000000000b1";
 
 async function main() {
   const bucket = await prisma.$queryRaw<
-    { id: string; public: boolean }[]
-  >`SELECT id, public FROM storage.buckets WHERE id = 'avatars'`;
+    {
+      id: string;
+      public: boolean;
+      file_size_limit: bigint | null;
+      allowed_mime_types: string[] | null;
+    }[]
+  >`SELECT id, public, file_size_limit, allowed_mime_types FROM storage.buckets WHERE id = 'avatars'`;
   assert(
     bucket[0]?.id === "avatars" && bucket[0]?.public === true,
     "avatarsバケットが public で存在する",
+  );
+  assert(
+    bucket[0]?.file_size_limit === BigInt(5242880),
+    "file_size_limitが5MBに設定されている",
+  );
+  assert(
+    JSON.stringify(bucket[0]?.allowed_mime_types) ===
+      JSON.stringify(["image/png", "image/jpeg", "image/webp"]),
+    "allowed_mime_typesが画像形式に制限されている",
+  );
+
+  // update/deleteポリシーは意図的に用意していない（immutable運用）
+  const policies = await prisma.$queryRaw<{ policyname: string; cmd: string }[]>`
+    SELECT policyname, cmd FROM pg_policies
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname LIKE 'avatars_%'
+  `;
+  assert(
+    policies.every((p) => p.cmd !== "UPDATE" && p.cmd !== "DELETE"),
+    "avatarsにUPDATE/DELETEポリシーが存在しない（immutable運用）",
   );
 
   // 自分のフォルダ（先頭パスセグメント = auth.uid()）には書き込める
@@ -63,6 +87,16 @@ async function main() {
       ),
     "他人のフォルダへのINSERTは拒否される（RLS）",
   );
+
+  // 自分のフォルダであってもUPDATEはできない（immutable運用）。
+  // UPDATE対象のポリシーが1つも無い場合、Postgres RLSはエラーを投げず
+  // 「対象行0件」として黙って成功するため、影響行数で確認する
+  // （脱退・kick後の元グループadminが現在のグループアイコンを書き換え/削除できて
+  // しまう問題を避けるための設計。レビュー指摘で発覚）。
+  const updatedRows = await withRlsContext(userA, (tx) =>
+    tx.$executeRaw`UPDATE storage.objects SET name = ${`${userA}/renamed.png`} WHERE bucket_id = 'avatars' AND name = ${`${userA}/test.png`}`,
+  );
+  assert(updatedRows === 0, "自分のフォルダでもUPDATEは0行にしかならない（immutable運用）");
 
   console.log("\nALL CHECKS PASSED");
 }
