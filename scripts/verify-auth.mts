@@ -71,8 +71,39 @@ async function main() {
     "空白のみのnicknameは拒否される",
   );
 
+  // 5. 51文字のnicknameは拒否される（DB側でもZodのmax(50)と同じ上限を強制）
+  const userId3 = "00000000-0000-0000-0000-0000000000ee";
+  await prisma.user.deleteMany({ where: { id: userId3 } });
+  await assertRejects(
+    () =>
+      withRlsContext(userId3, (tx) =>
+        tx.$queryRaw`SELECT * FROM create_profile(${"あ".repeat(51)}, NULL)`,
+      ),
+    "51文字のnicknameは拒否される",
+  );
+
+  // 6. 50文字ちょうど・前後空白ありは、trimされた上で作成できる（境界値）
+  const userId4 = "00000000-0000-0000-0000-0000000000ff";
+  await prisma.user.deleteMany({ where: { id: userId4 } });
+  const trimmedRows = await withRlsContext(userId4, (tx) =>
+    tx.$queryRaw<
+      { nickname: string }[]
+    >`SELECT * FROM create_profile(${`  ${"あ".repeat(50)}  `}, NULL)`,
+  );
+  assert(
+    trimmedRows[0]?.nickname === "あ".repeat(50),
+    "50文字ちょうど・前後空白ありはtrimされて作成できる",
+  );
+
   console.log("\nALL CHECKS PASSED");
 }
+
+const testUserIds = [
+  userId,
+  "00000000-0000-0000-0000-0000000000dd",
+  "00000000-0000-0000-0000-0000000000ee",
+  "00000000-0000-0000-0000-0000000000ff",
+];
 
 main()
   .catch((err) => {
@@ -80,6 +111,6 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.user.deleteMany({ where: { id: { in: [userId, "00000000-0000-0000-0000-0000000000dd"] } } });
+    await prisma.user.deleteMany({ where: { id: { in: testUserIds } } });
     await prisma.$disconnect();
   });

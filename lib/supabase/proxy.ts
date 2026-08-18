@@ -18,7 +18,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headers) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
@@ -26,12 +26,20 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, options);
           }
+          // headersにはCache-Control等、認証cookieを含むレスポンスをCDN/中間
+          // キャッシュにキャッシュさせないためのヘッダーが渡される。ここで
+          // 落とすとセッション混線のリスクがあるため必ずresponseへコピーする。
+          for (const [key, value] of Object.entries(headers)) {
+            response.headers.set(key, value);
+          }
         },
       },
     },
   );
 
-  await supabase.auth.getUser();
+  // getUser()は毎回Auth APIへリクエストする。getClaims()はJWTをJWKSで
+  // ローカル検証できる（非対称鍵の場合）ため@supabase/ssrの現行例に合わせた。
+  await supabase.auth.getClaims();
 
   return response;
 }
