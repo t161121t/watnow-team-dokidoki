@@ -46,7 +46,22 @@ const architectureBoundaries = {
       { type: "lib-db", pattern: "lib/db/**" },
       { type: "lib-supabase", pattern: "lib/supabase/**" },
       { type: "lib", pattern: "lib/**" },
-      { type: "components", pattern: "components/**" },
+      {
+        // partialMatch: false が必須（2026-08-20発覚の設定不具合の修正）。
+        // eslint-plugin-boundariesはデフォルト（フォルダモード + 部分一致）だと、
+        // ファイル名側から1階層ずつ遡ってパターンを照合するため、
+        // "features/*/components/**" (feature-ui) より前に、同名ディレクトリを
+        // 指すこの汎用パターンが浅い階層で先にマッチしてしまい、
+        // features/<domain>/components/**配下のファイルが誤って"components"型と
+        // 判定されていた（feature-uiの許可ポリシーが一切効かない状態だった）。
+        // partialMatch: false でルートからのフルパス一致を要求することで、この
+        // 誤判定を防ぐ。他の型（他ディレクトリ名との衝突が無い）は同様の問題が
+        // 起きないため変更していないが、根本的には全要素を見直す必要がある
+        // （別途issue化）。
+        type: "components",
+        pattern: "components/**",
+        partialMatch: false,
+      },
       { type: "scripts", pattern: "scripts/**" },
     ],
     // lib/prisma.ts は「lib」型に含まれる（フォルダ単位でしか要素定義できないため）。
@@ -79,6 +94,21 @@ const architectureBoundaries = {
                 },
               },
               {
+                // RSC（Server Component）からの読み取りはactions.tsを経由せず
+                // server/を直接呼んでよい（2026-08-20方針変更。理由は
+                // docs/アーキテクチャ.md参照）。server/は`import "server-only"`が
+                // 付いているため、Client Componentからは呼ぼうとしてもビルドエラーに
+                // なる（RSC以外からの直接呼び出しはこの仕組みで防がれる）。
+                // 書き込み（mutation）はこのルールでは区別できないため、
+                // actions.ts経由にする規約はコードレビューで担保する。
+                to: {
+                  element: {
+                    type: "feature-server",
+                    captured: { domain: "{{from.domain}}" },
+                  },
+                },
+              },
+              {
                 to: {
                   element: {
                     type: "feature-shared",
@@ -88,6 +118,10 @@ const architectureBoundaries = {
               },
               { to: { element: { type: "components" } } },
               { to: { element: { type: "lib" } } },
+              // server/を直接呼ぶRSCが自分でuserIdを取得できるようにするため
+              // （lib/supabase/server.tsのgetCurrentUserId）。上のfeature-server
+              // 許可と対になる変更（2026-08-20）。
+              { to: { element: { type: "lib-supabase" } } },
             ],
           },
           {
