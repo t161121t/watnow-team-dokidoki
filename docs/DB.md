@@ -688,13 +688,14 @@ Supabase Storage 自体は `storage.objects` を使う。アプリ側で参照�
 - group icon
 - challenge evidence photo
 
-Storage bucket 案:
+Storage bucket:
 
+| bucket               | 用途                | 公開                                              | 状態                                        |
+| -------------------- | ----------------- | ----------------------------------------------- | ------------------------------------------- |
+| `avatars`            | user / group icon | public（推測不可なランダムファイル名 + 5MB上限 + image/png・jpeg・webp限定） | 実装済み（`prisma/sql/common/004_avatars_storage.sql`。2026-08-18〜19） |
+| `challenge-evidence` | チャレンジ写真           | private                                          | 未実装（challengesドメイン未着手）                       |
 
-| bucket               | 用途                | 公開                    |
-| -------------------- | ----------------- | --------------------- |
-| `avatars`            | user / group icon | public または signed URL |
-| `challenge-evidence` | チャレンジ写真           | private               |
+`avatars`は user avatar / group icon 共用の単一バケット。pathは `{アップロードしたuserId}/{ランダムなファイル名}` 固定（Storage層ではuser avatarかgroup iconかを区別しない）。書き込みはinsertのみ許可（update/delete不可のimmutable運用）で、「変更」は新しいpathへの再アップロード＋`users.avatar_path`/`groups.icon_path`の向け直しで行う。SELECTポリシーは意図的に無し（public配信は`storage.buckets.public`フラグ側で完結するため不要。バケット内容の列挙を防ぐ目的もある）。詳細な理由は`prisma/sql/common/004_avatars_storage.sql`のコメント参照。
 
 
 ---
@@ -811,6 +812,7 @@ RLS / view 条件:
 
 | RPC                                                 | 責務                                                                          |
 | --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `create_profile(nickname, avatar_path)`             | Supabase Auth サインアップ後、オンボーディングで一度だけ呼ぶ。`users` 行の唯一の作成経路（`auth.users` とはFK無しの1:1、SECURITY DEFINER。§4.1・§7.2）。2026-08-18実装（`prisma/sql/auth/001_create_profile.sql`） |
 | `create_group(name, icon_path)`                     | group 作成、作成者を admin member（`active`）にする、wallet 初期化                            |
 | `search_users(group_id, query)`                      | 呼び出しユーザーが `group_id` の admin であることを検証してから実行（2026-08-17レビュー反映）。ニックネームの部分一致検索。`id, nickname, avatar_path` のみ返す。`query` 最低2文字、結果は最大20件、既にそのgroupの `group_members` にいるユーザーは除外 |
 | `invite_member(group_id, user_id)`                  | admin のみ。既存行の有無で挙動が変わる（再招待対応。§4.3詳細）。旧 `join_group(invite_code)` を置き換え（§4.4） |
