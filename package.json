@@ -20,6 +20,7 @@
     "verify:storage": "tsx scripts/verify-storage.mts",
     "verify:groups": "tsx scripts/verify-groups.mts",
     "verify:secrets": "tsx scripts/verify-secrets.mts",
+    "verify:auctions": "tsx scripts/verify-auctions.mts",
     "verify:rls": "tsx scripts/verify-rls.mts",
     "verify:auction": "tsx scripts/verify-auction-flow.mts",
     "setup": "npm install && npm run db:check"
