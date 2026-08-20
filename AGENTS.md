@@ -41,7 +41,7 @@
 
 ## スタック（要約）
 
-- Frontend: React 19, TypeScript, Vite, TanStack Router/Query, RHF, Zod, Tailwind, shadcn/ui, PWA
+- Frontend: React 19, TypeScript, Next.js（App Router）, Prisma, RHF, Zod, Tailwind, shadcn/ui, PWA（2026-08-17: Vite + TanStack Router/Query から変更。TanStack Query / Zustand / Oxlint / Oxfmt は不採用。詳細は `docs/技術選定.md`）
 - Backend: Supabase（Auth / Postgres / RLS / Realtime / Storage / Edge Functions）
 - 配置: 複数テーブル整合 → PostgreSQL Function / 外部 I/O → Edge Functions
 

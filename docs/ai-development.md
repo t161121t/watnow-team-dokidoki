@@ -93,5 +93,6 @@ AI は高速な下書き担当。**マージ責任は人間**。
 ## これからコードが増えたら追加するもの
 
 - Frontend / Supabase 向けの短い Cursor rule（詳細は AGENTS に書かない重複を避ける）
-- `AGENTS.md` のコマンド欄（`npm run …` 等）
-- CI（typecheck / test）とブランチ保護
+- ~~`AGENTS.md` のコマンド欄（`npm run …` 等）~~ → 導入済み。コマンドが増えるたびに追記している
+- ~~CI（typecheck）~~ → 導入済み（`.github/workflows/ci.yml`。lint / typecheck / build。2026-08-17）。test は技術選定.md §4.1の方針通りまだ未導入
+- ブランチ保護は未設定（GitHub側のリポジトリ設定）
