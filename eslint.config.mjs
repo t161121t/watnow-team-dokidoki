@@ -46,7 +46,22 @@ const architectureBoundaries = {
       { type: "lib-db", pattern: "lib/db/**" },
       { type: "lib-supabase", pattern: "lib/supabase/**" },
       { type: "lib", pattern: "lib/**" },
-      { type: "components", pattern: "components/**" },
+      {
+        // partialMatch: false が必須（2026-08-20発覚の設定不具合の修正）。
+        // eslint-plugin-boundariesはデフォルト（フォルダモード + 部分一致）だと、
+        // ファイル名側から1階層ずつ遡ってパターンを照合するため、
+        // "features/*/components/**" (feature-ui) より前に、同名ディレクトリを
+        // 指すこの汎用パターンが浅い階層で先にマッチしてしまい、
+        // features/<domain>/components/**配下のファイルが誤って"components"型と
+        // 判定されていた（feature-uiの許可ポリシーが一切効かない状態だった）。
+        // partialMatch: false でルートからのフルパス一致を要求することで、この
+        // 誤判定を防ぐ。他の型（他ディレクトリ名との衝突が無い）は同様の問題が
+        // 起きないため変更していないが、根本的には全要素を見直す必要がある
+        // （別途issue化）。
+        type: "components",
+        pattern: "components/**",
+        partialMatch: false,
+      },
       { type: "scripts", pattern: "scripts/**" },
     ],
     // lib/prisma.ts は「lib」型に含まれる（フォルダ単位でしか要素定義できないため）。
@@ -79,6 +94,21 @@ const architectureBoundaries = {
                 },
               },
               {
+                // RSC（Server Component）からの読み取りはactions.tsを経由せず
+                // server/を直接呼んでよい（2026-08-20方針変更。理由は
+                // docs/アーキテクチャ.md参照）。server/は`import "server-only"`が
+                // 付いているため、Client Componentからは呼ぼうとしてもビルドエラーに
+                // なる（RSC以外からの直接呼び出しはこの仕組みで防がれる）。
+                // 書き込み（mutation）はこのルールでは区別できないため、
+                // actions.ts経由にする規約はコードレビューで担保する。
+                to: {
+                  element: {
+                    type: "feature-server",
+                    captured: { domain: "{{from.domain}}" },
+                  },
+                },
+              },
+              {
                 to: {
                   element: {
                     type: "feature-shared",
@@ -88,6 +118,15 @@ const architectureBoundaries = {
               },
               { to: { element: { type: "components" } } },
               { to: { element: { type: "lib" } } },
+              // server/を直接呼ぶRSCが自分でuserIdを取得できるようにするため
+              // （lib/supabase/server.tsのgetCurrentUserId）。上のfeature-server
+              // 許可と対になる変更（2026-08-20）。boundaries/elementsはフォルダ
+              // 単位の分類が前提で、lib/supabase内の特定ファイル（server.ts）だけを
+              // 別要素として切り出すのは非対応（試したところ警告が出た）だったため、
+              // ここではlib-supabase型を丸ごと許可し、storage.ts/proxy.ts等への
+              // アクセスは下のno-restricted-imports（restrictComponentSupabaseAccess）
+              // でピンポイントに禁止する形にした（PRレビュー指摘を受けての方針）。
+              { to: { element: { type: "lib-supabase" } } },
             ],
           },
           {
@@ -200,11 +239,36 @@ const restrictedDirectDbAccess = {
   },
 };
 
+// features/<domain>/components（RSC）にはlib/supabase/server.ts（認証確認）
+// だけを許可し、lib/supabase/storage.ts・proxy.tsはactions.ts限定にする
+// （lib/README.md参照）。boundaries/elementsはフォルダ単位の分類が前提で、
+// 同じlib/supabase/フォルダ内の特定ファイルだけを別要素に切り出すのは非対応
+// （試したところ警告が出た）だったため、no-restricted-importsでピンポイントに
+// 禁止する（2026-08-20 PRレビュー指摘）。
+const restrictComponentSupabaseAccess = {
+  files: ["features/*/components/**/*.{ts,tsx}"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: ["@/lib/supabase/storage", "@/lib/supabase/proxy"],
+            message:
+              "features/*/components からはlib/supabase/server（getCurrentUserId）だけ使える。Storage操作等の書き込み系はactions.ts経由にする（lib/README.md参照）。",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   architectureBoundaries,
   restrictedDirectDbAccess,
+  restrictComponentSupabaseAccess,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
