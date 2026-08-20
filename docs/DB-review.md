@@ -1,8 +1,8 @@
 # DB.md レビュー指摘（修正候補）
 
-ステータス: 1・2・4 対応済み / 3・5 未対応
+ステータス: 1・2・4・5 対応済み（5はカラム削除によりモート） / 3 は一部モート・残り1点は未対応
 作成日: 2026-08-16
-更新日: 2026-08-16
+更新日: 2026-08-20
 対象: `docs/DB.md`
 参照: `docs/PRD.md` / `docs/TRD.md` / `docs/オークションルール.md` / `docs/コンセプト変更まとめ.md`
 
@@ -28,15 +28,14 @@
 
 §6.3 の RPC 一覧・lock 方針、§10.2 のトランザクション設計を更新済み。
 
-## 3. ER 図（§2）とテーブル定義の不整合
+## 3. ER 図（§2）とテーブル定義の不整合 → 一部モート（2026-08-20確認）
 
 - 該当箇所: `DB.md` §2 論理 ER
 - 問題:
-  - `groups 1─* challenges` は §4.14 `challenges.group_id` が nullable（システム共通チャレンジは `group_id = null`）である点と矛盾する。図では必須の 1-* 関係に見えるが、実際は 0..1 相当。
-  - `group_auction_settings`（`groups` と 1-1）が ER 図に出てきていない。
-- 修正案:
+  - `groups 1─* challenges` は §4.14 `challenges.group_id` が nullable（システム共通チャレンジは `group_id = null`）である点と矛盾する。図では必須の 1-* 関係に見えるが、実際は 0..1 相当。**→ 未対応のまま残っている**
+  - ~~`group_auction_settings`（`groups` と 1-1）が ER 図に出てきていない。~~ **→ モート**。`group_auction_settings`テーブル自体がDB-11で廃止済み（P2は`groups.auction_open_seconds`へ、他はアプリ定数化）のため、この指摘は解消
+- 修正案（残る指摘のみ）:
   - `challenges` との関係線を任意（0..1 または点線）に修正するか、注記を添える。
-  - `groups 1 ─ 1 group_auction_settings` を ER 図に追加する。
 
 ## 4. `finalize_auction` で winner 残高不足だった場合の分岐が未設計（DB-2 関連） → 対応済み
 
@@ -56,13 +55,13 @@
 
   `bid_status` enum に `failed` を追加し、§4.11・§10.2・§10.2.1・§13 テスト観点・§14（本項目）を更新済み。
 
-## 5. `secret_group_items.seller_id` が `secrets.owner_id` と異なるケースの扱いが未記載
+## 5. `secret_group_items.seller_id` が `secrets.owner_id` と異なるケースの扱いが未記載 → モート（2026-08-20確認）
 
 - 該当箇所: `DB.md` §4.9 `secret_group_items`
 - 問題:
 「`seller_id` は基本 `secrets.owner_id`」とあるだけで、両者が異なり得るケース（権利委譲、共同出品など Phase 2 相当の想定）に触れていない。MVP で常に一致する前提なら、その旨を明記した方が実装時に安全側で固定しやすい。
-- 修正案:
-MVP では `seller_id = secrets.owner_id` を常に成立させる前提であることを明記する（あるいは、異なり得るケースがあるなら具体的に列挙する）。
+- 対応内容:
+`secret_group_items.seller_id`カラム自体をDB-13で削除（`secrets.owner_id`への3NF違反的な冗長列だったため。§4.9）。参照すべき値は常に`secrets.owner_id`一本になったため、この指摘は解消。
 
 ---
 
