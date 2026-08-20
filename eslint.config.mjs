@@ -120,7 +120,12 @@ const architectureBoundaries = {
               { to: { element: { type: "lib" } } },
               // server/を直接呼ぶRSCが自分でuserIdを取得できるようにするため
               // （lib/supabase/server.tsのgetCurrentUserId）。上のfeature-server
-              // 許可と対になる変更（2026-08-20）。
+              // 許可と対になる変更（2026-08-20）。boundaries/elementsはフォルダ
+              // 単位の分類が前提で、lib/supabase内の特定ファイル（server.ts）だけを
+              // 別要素として切り出すのは非対応（試したところ警告が出た）だったため、
+              // ここではlib-supabase型を丸ごと許可し、storage.ts/proxy.ts等への
+              // アクセスは下のno-restricted-imports（restrictComponentSupabaseAccess）
+              // でピンポイントに禁止する形にした（PRレビュー指摘を受けての方針）。
               { to: { element: { type: "lib-supabase" } } },
             ],
           },
@@ -234,11 +239,36 @@ const restrictedDirectDbAccess = {
   },
 };
 
+// features/<domain>/components（RSC）にはlib/supabase/server.ts（認証確認）
+// だけを許可し、lib/supabase/storage.ts・proxy.tsはactions.ts限定にする
+// （lib/README.md参照）。boundaries/elementsはフォルダ単位の分類が前提で、
+// 同じlib/supabase/フォルダ内の特定ファイルだけを別要素に切り出すのは非対応
+// （試したところ警告が出た）だったため、no-restricted-importsでピンポイントに
+// 禁止する（2026-08-20 PRレビュー指摘）。
+const restrictComponentSupabaseAccess = {
+  files: ["features/*/components/**/*.{ts,tsx}"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: ["@/lib/supabase/storage", "@/lib/supabase/proxy"],
+            message:
+              "features/*/components からはlib/supabase/server（getCurrentUserId）だけ使える。Storage操作等の書き込み系はactions.ts経由にする（lib/README.md参照）。",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   architectureBoundaries,
   restrictedDirectDbAccess,
+  restrictComponentSupabaseAccess,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
