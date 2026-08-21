@@ -4,9 +4,10 @@
 //
 // timestamptz列は$queryRaw経由だとDateオブジェクトで返る（features/groups/types.ts
 // のレビュー指摘で確認済み）。bid_count / rank（count(*)・RANK()の結果）はpgドライバの
-// デフォルト挙動だとint8はstringで返るはずだが、実DB未接続のため未検証
-// （2026-08-20、Supabase開発用DBが一時的に到達不能だったため。DB復旧後に
-// scripts/verify-auctions.mtsで確認すること）。
+// デフォルト挙動だとint8はstringで返るはずだが未検証（2026-08-20、サンドボックス
+// 環境からSupabase開発用DBへの直接接続が到達不能だったため。プロジェクト自体は
+// 稼働中で、Supabase MCP経由の代替検証では他の項目は全てパス済み。PR #56参照）。
+// サンドボックスの直接DB接続が復旧したら scripts/verify-auctions.mts で確認すること。
 
 export type AuctionStatus =
   | "pending_dealer_approval"
