@@ -19,4 +19,3 @@ export type Auction = {
   isLeading: boolean;
   bids: Bid[];
 };
-

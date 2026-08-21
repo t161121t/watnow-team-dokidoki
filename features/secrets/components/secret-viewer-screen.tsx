@@ -3,6 +3,7 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
+import { StarRating } from "@/components/ui/star-rating";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Secret } from "@/lib/types/secret";
 
@@ -24,7 +25,7 @@ export function SecretViewerScreen({ secret }: { secret: Secret }) {
           <h3 className="mt-2 text-lg leading-7 font-bold">{secret.summary}</h3>
         </div>
         <div className="p-5">
-          <p className="text-[10px] text-[#65aaff]">秘密の本文</p>
+          <p className="text-[10px] text-[#e591ff]">秘密の本文</p>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-white/82">
             {secret.body}
           </p>
@@ -35,7 +36,7 @@ export function SecretViewerScreen({ secret }: { secret: Secret }) {
             </div>
             <div>
               <p className="text-white/38">レア度</p>
-              <p className="mt-1 font-bold">{secret.rarity}</p>
+              <StarRating value={secret.rarity} label="レア度" className="mt-1" />
             </div>
           </div>
         </div>

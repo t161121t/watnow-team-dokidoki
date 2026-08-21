@@ -3,6 +3,7 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { MockActionButton } from "@/components/ui/mock-action-button";
 import { NeonCard } from "@/components/ui/neon-card";
+import { StarRating } from "@/components/ui/star-rating";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Bid } from "@/lib/types/auction";
 import type { Secret } from "@/lib/types/secret";
@@ -24,9 +25,6 @@ export function SecretDetailScreen({
       />
 
       <NeonCard className="p-5">
-        <p className="mb-4 text-[10px] font-bold text-[#efb1ff]">
-          {isDealer ? "ディーラー担当" : "自分の秘密"}
-        </p>
         <p className="text-[10px] text-white/40">秘密の見出し</p>
         <h2 className="mt-2 text-lg leading-7 font-bold">{secret.summary}</h2>
         <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/10 pt-4 text-xs">
@@ -36,7 +34,7 @@ export function SecretDetailScreen({
           </div>
           <div>
             <p className="text-white/38">レア度</p>
-            <p className="mt-1 font-bold">{secret.rarity}</p>
+            <StarRating value={secret.rarity} label="レア度" className="mt-1" />
           </div>
           <div>
             <p className="text-white/38">価値</p>

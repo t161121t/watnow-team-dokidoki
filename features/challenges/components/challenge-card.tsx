@@ -5,7 +5,7 @@ import type { Challenge } from "@/lib/types/challenge";
 
 const borders: Record<Challenge["tone"], string> = {
   pink: "border-[#c038ff]/75",
-  blue: "border-[#2c8bff]/65",
+  blue: "border-[#c038ff]/75",
   violet: "border-[#914dff]/70",
 };
 
@@ -20,7 +20,7 @@ export function ChallengeCard({ challenge }: { challenge: Challenge }) {
         <span className="text-[10px] text-white/38">{challenge.attemptsLabel}</span>
       </div>
       <MockActionButton
-        variant={challenge.tone === "blue" ? "blue" : "secondary"}
+        variant="secondary"
         size="sm"
         className="mt-4 w-full"
         feedback={`${challenge.reward}pt獲得しました`}

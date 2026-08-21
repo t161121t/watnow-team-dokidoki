@@ -7,6 +7,7 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
+import { StarRating } from "@/components/ui/star-rating";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Auction } from "@/lib/types/auction";
 import type { Group } from "@/lib/types/group";
@@ -49,11 +50,8 @@ export function AuctionRoomScreen({
         backHref={`/groups/${group.id}/auctions`}
       />
 
-      <div className="mb-4 flex items-center justify-between">
-        <span className="rounded-full border border-[#c038ff]/60 bg-[#23052f]/80 px-3 py-1.5 text-[10px] font-bold text-[#efa9ff]">
-          開催中
-        </span>
-        <span className="text-xs font-bold text-[#65aaff]">
+      <div className="mb-4 text-right">
+        <span className="text-xs font-bold text-[#e591ff]">
           {auction.remainingLabel}
         </span>
       </div>
@@ -68,12 +66,16 @@ export function AuctionRoomScreen({
           </div>
           <div>
             <p className="text-white/40">レア度</p>
-            <p className="mt-1 font-bold">{auction.rarity}</p>
+            <StarRating
+              value={auction.rarity}
+              label="レア度"
+              className="mt-1.5"
+            />
           </div>
         </div>
       </NeonCard>
 
-      <NeonCard className="mt-4 border-[#2386ff]/60 p-5 shadow-[0_0_18px_rgba(35,134,255,0.24)]">
+      <NeonCard className="mt-4 p-5">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs font-bold text-white/45">現在価格</p>

@@ -18,6 +18,7 @@ export function BottomNavigation({
       <ul className="grid grid-cols-5">
         {items.map((item) => {
           const isActive = item.key === active;
+          const Icon = item.icon;
 
           return (
             <li key={item.key}>
@@ -25,19 +26,18 @@ export function BottomNavigation({
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex min-h-14 items-center justify-center rounded-2xl px-1 text-[10px] font-bold text-white/50 transition",
+                  "flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[9px] font-bold text-white/50 transition",
                   isActive && "text-white",
                 )}
               >
-                <span
+                <Icon
                   className={cn(
-                    "rounded-full px-1 py-2",
+                    "size-[22px] stroke-[1.8]",
                     isActive &&
-                      "[text-shadow:0_0_7px_#39a1ff,0_0_12px_#e437ff]",
+                      "drop-shadow-[0_0_7px_#e437ff]",
                   )}
-                >
-                  {item.label}
-                </span>
+                />
+                <span>{item.label}</span>
               </Link>
             </li>
           );

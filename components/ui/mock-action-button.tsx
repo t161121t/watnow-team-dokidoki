@@ -34,4 +34,3 @@ export function MockActionButton({ children, feedback, ...props }: Props) {
     </>
   );
 }
-

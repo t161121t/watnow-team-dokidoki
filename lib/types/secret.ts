@@ -23,4 +23,3 @@ export type Secret = {
   remainingLabel?: string;
   soldPrice?: number;
 };
-

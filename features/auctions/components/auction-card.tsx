@@ -9,12 +9,9 @@ export function AuctionCard({ auction }: { auction: Auction }) {
       href={`/groups/${auction.groupId}/auctions/${auction.id}`}
       className="group block focus-visible:outline-none"
     >
-      <NeonCard className="p-5 transition group-hover:-translate-y-0.5 group-hover:border-[#d75cff] group-focus-visible:ring-2 group-focus-visible:ring-[#55a8ff]">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <span className="rounded-full border border-[#c038ff]/45 bg-[#24062f]/75 px-2.5 py-1 text-[10px] font-bold text-[#efadff]">
-            開催中
-          </span>
-          <span className="text-[11px] font-bold text-[#69adff]">
+      <NeonCard className="p-5 transition group-hover:-translate-y-0.5 group-hover:border-[#d75cff] group-focus-visible:ring-2 group-focus-visible:ring-[#c038ff]">
+        <div className="mb-3 text-right">
+          <span className="text-[11px] font-bold text-[#e591ff]">
             {auction.remainingLabel}
           </span>
         </div>
@@ -30,7 +27,7 @@ export function AuctionCard({ auction }: { auction: Auction }) {
           <span className="text-[10px] text-white/42">入札 {auction.bidCount}件</span>
         </div>
         {auction.isLeading ? (
-          <p className="mt-2 text-right text-[10px] font-bold text-[#63e0ff]">
+          <p className="mt-2 text-right text-[10px] font-bold text-[#e591ff]">
             あなたが最高入札者です
           </p>
         ) : null}

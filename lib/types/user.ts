@@ -5,4 +5,3 @@ export type User = {
   initials: string;
   avatarColor: "pink" | "blue" | "violet" | "amber";
 };
-

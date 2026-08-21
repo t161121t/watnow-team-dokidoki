@@ -8,6 +8,7 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonTextarea } from "@/components/ui/neon-field";
+import { StarRating } from "@/components/ui/star-rating";
 import { cn } from "@/lib/utils";
 import type { SecretCategory } from "@/lib/types/secret";
 
@@ -94,24 +95,13 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
           </div>
           <div>
             <p className="mb-2 text-sm font-bold">レア度</p>
-            <div className="grid grid-cols-5 gap-2 rounded-2xl border border-[#c038ff]/65 bg-black/65 p-3 shadow-[0_0_14px_rgba(192,56,255,0.35)]">
-              {[1, 2, 3, 4, 5].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  aria-label={`レア度${item}`}
-                  aria-pressed={rarity === item}
-                  className={cn(
-                    "min-h-10 rounded-full border text-sm font-bold transition",
-                    rarity === item
-                      ? "border-[#c038ff] bg-[#2b0738] shadow-[0_0_10px_#c038ff]"
-                      : "border-white/15 text-white/45",
-                  )}
-                  onClick={() => setRarity(item as 1 | 2 | 3 | 4 | 5)}
-                >
-                  {item}
-                </button>
-              ))}
+            <div className="flex justify-between rounded-2xl border border-[#c038ff]/65 bg-black/65 px-4 py-3 shadow-[0_0_14px_rgba(192,56,255,0.35)]">
+              <StarRating
+                value={rarity}
+                label="レア度"
+                size="lg"
+                onValueChange={setRarity}
+              />
             </div>
           </div>
           <NeonField id="secret-value" label="秘密の価値">
@@ -149,7 +139,7 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
               </div>
               <div>
                 <p className="text-white/38">レア度</p>
-                <p className="mt-1 font-bold">{rarity}</p>
+                <StarRating value={rarity} label="レア度" className="mt-1" />
               </div>
               <div>
                 <p className="text-white/38">価値</p>

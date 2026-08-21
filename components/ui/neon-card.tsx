@@ -13,4 +13,3 @@ export function NeonCard({ className, ...props }: ComponentProps<"div">) {
     />
   );
 }
-

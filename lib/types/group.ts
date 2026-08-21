@@ -28,4 +28,3 @@ export type GroupInvitation = {
   invitedAtLabel: string;
   memberCount: number;
 };
-

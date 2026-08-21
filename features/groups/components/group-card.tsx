@@ -6,7 +6,7 @@ import type { Group } from "@/lib/types/group";
 export function GroupCard({ group }: { group: Group }) {
   return (
     <Link href={`/groups/${group.id}`} className="group block focus-visible:outline-none">
-      <NeonCard className="p-4 transition group-hover:-translate-y-0.5 group-hover:border-[#dd62ff] group-focus-visible:ring-2 group-focus-visible:ring-[#55a8ff]">
+      <NeonCard className="p-4 transition group-hover:-translate-y-0.5 group-hover:border-[#dd62ff] group-focus-visible:ring-2 group-focus-visible:ring-[#c038ff]">
         <div className="flex items-center gap-3.5">
           <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-[#cf56ff]/75 bg-[#1c0525] text-[26px] shadow-[0_0_18px_rgba(192,56,255,0.4)]">
             {group.icon}
