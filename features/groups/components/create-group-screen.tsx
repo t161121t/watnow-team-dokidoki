@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
+import { BackButton } from "@/components/ui/back-button";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput } from "@/components/ui/neon-field";
@@ -88,9 +89,11 @@ export function CreateGroupScreen() {
             ))}
           </NeonCard>
           <div className="grid grid-cols-[0.7fr_1.3fr] gap-3">
-            <NeonButton variant="quiet" size="lg" onClick={() => setStep(1)}>
-              戻る
-            </NeonButton>
+            <BackButton
+              onClick={() => setStep(1)}
+              aria-label="前のステップへ戻る"
+              className="justify-self-center"
+            />
             <NeonButton
               size="lg"
               onClick={() => router.push("/groups/night-owls")}
