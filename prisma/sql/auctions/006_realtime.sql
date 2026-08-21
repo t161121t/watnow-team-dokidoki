@@ -10,8 +10,20 @@
 -- ALTER PUBLICATION ... ADD TABLE は再実行するとエラーになる（既にメンバーの場合）
 -- ため、pg_publication_tablesで存在確認してから実行する（何度実行しても壊れない
 -- ようにする、というprisma/sql/README.mdのルールに合わせるため）。
+--
+-- 2026-08-22 PRレビュー指摘: このリポジトリは`npm run db:dev`（ローカルの
+-- Prisma Postgres）もサポートしており、そちらには`supabase_realtime`
+-- publication自体が存在しない。publication自体が無い環境ではこのDOブロックは
+-- 何もせず正常終了する（pg_publication_tablesがpubname一致0件のままIF NOT
+-- EXISTSがtrueになり、ALTER PUBLICATIONまで到達してしまうとエラーになるため、
+-- publicationの存在自体もpg_catalog.pg_publicationで確認してからにする）。
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_publication WHERE pubname = 'supabase_realtime') THEN
+    RAISE NOTICE 'auctions realtime publication skipped: supabase_realtime publication not found (expected on non-Supabase Postgres such as npm run db:dev)';
+    RETURN;
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_publication_tables
     WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'auctions'
