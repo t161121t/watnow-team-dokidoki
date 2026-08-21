@@ -150,11 +150,14 @@ BEGIN
   v_dealer_share := v_winner_bid.amount - v_seller_share;
 
   -- 注意: seller/dealerが脱退/kickされていた場合、_credit_walletは
-  -- expired walletに対して例外を投げてfinalize全体を中断する。この場合auctionは
+  -- expired walletに対して例外を投げてfinalize自体を中断する。この場合auctionは
   -- finalizingのまま残り、finalize_due_auctionsの復旧経路が再試行し続けるが、
   -- 根本解決には至らない（has_active_auction_involvementでleave/kick自体は
   -- 事前に防いでいるが、承認後にexpireする経路が完全に塞がっているわけではない）。
-  -- 既知の残課題としてPRに明記する。
+  -- 2026-08-22: この例外自体は解消していないが、finalize_due_auctions側で
+  -- auctionごとに隔離するようにしたため、この1件が恒久的に失敗し続けても
+  -- 他のauctionの確定処理を巻き込まなくなった（同ファイルのfinalize_due_auctions
+  -- コメント参照）。
   PERFORM _credit_wallet(v_auction.group_id, v_auction.seller_id, v_seller_share, 'seller_share_credit', 'auctions', v_auction.id);
   PERFORM _credit_wallet(v_auction.group_id, v_auction.dealer_id, v_dealer_share, 'dealer_share_credit', 'auctions', v_auction.id);
 
@@ -179,6 +182,18 @@ $$;
 
 -- cron用。開催終了したopenオークションの確定に加え、claim済みのままStage Bが
 -- 完了しなかった（プロセス異常終了等）finalizingオークションの復旧も行う。
+--
+-- 2026-08-22 PRレビュー反映（issue #43、pg_cron定期実行の追加で顕在化）:
+-- 従来は1件のfinalize_auction()の例外が関数全体を中断させ、そのトランザクション
+-- 内で既に成功していた他auctionの確定処理まで暗黙にロールバックされていた
+-- （finalize_due_auctions全体が1トランザクションのため）。さらに、その1件
+-- （典型的にはseller/dealerのexpired walletで恒久的に失敗するケース。上記の
+-- finalize_auctionコメント参照）が毎分retryされ続け、同じ実行内で後続の
+-- auctionまで巻き込んで処理を止め続けるリスクがあった。auctionごとに
+-- BEGIN...EXCEPTION WHEN OTHERS...ENDのサブブロック（暗黙のSAVEPOINT）で
+-- 例外を隔離し、1件の失敗が他に波及しないようにした。失敗した対象は
+-- 次回以降のcron実行で再試行される（open/finalizingのままなので対象条件に
+-- 残り続ける）。
 CREATE OR REPLACE FUNCTION finalize_due_auctions()
 RETURNS void
 LANGUAGE plpgsql
@@ -191,16 +206,24 @@ BEGIN
   FOR v_id IN
     SELECT id FROM auctions WHERE status = 'open' AND ends_at <= now()
   LOOP
-    IF claim_auction_for_finalize(v_id) THEN
-      PERFORM finalize_auction(v_id);
-    END IF;
+    BEGIN
+      IF claim_auction_for_finalize(v_id) THEN
+        PERFORM finalize_auction(v_id);
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'finalize_due_auctions: failed to finalize auction % (%): %', v_id, SQLSTATE, SQLERRM;
+    END;
   END LOOP;
 
   -- 復旧経路: 5分以上 finalizing のまま止まっているものを拾い直す
   FOR v_id IN
     SELECT id FROM auctions WHERE status = 'finalizing' AND updated_at < now() - interval '5 minutes'
   LOOP
-    PERFORM finalize_auction(v_id);
+    BEGIN
+      PERFORM finalize_auction(v_id);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'finalize_due_auctions: failed to recover finalizing auction % (%): %', v_id, SQLSTATE, SQLERRM;
+    END;
   END LOOP;
 END;
 $$;
