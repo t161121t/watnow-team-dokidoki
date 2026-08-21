@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
+import { BackButton } from "@/components/ui/back-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
 import { getGroupNavigation } from "@/lib/navigation";
@@ -20,11 +20,12 @@ export function GroupHomeScreen({
   return (
     <MobileShell withNavigation className="pt-[58px]">
       <div className="mb-7 flex items-center justify-between gap-3">
-        <Link href="/groups" className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1">
+          <BackButton href="/groups" aria-label="グループ一覧へ戻る" className="-ml-2" />
           <h1 className="truncate text-[27px] font-bold [text-shadow:0_0_12px_rgba(208,66,255,0.9),0_0_36px_rgba(138,43,226,0.55)]">
             {group.name}
           </h1>
-        </Link>
+        </div>
         {group.role === "admin" ? (
           <NeonLink
             href={`/groups/${group.id}/manage`}
