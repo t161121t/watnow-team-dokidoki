@@ -13,7 +13,7 @@ export function MobileShell({
 }) {
   return (
     <main className="relative min-h-svh overflow-x-hidden bg-[#020204] text-white">
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-full max-w-[520px] -translate-x-1/2 bg-[url('/onboarding-background.png')] bg-[length:auto_120%] bg-top bg-no-repeat shadow-[0_0_90px_rgba(93,22,136,0.16)]">
+      <div className="pointer-events-none fixed inset-y-0 left-1/2 z-0 w-full max-w-[520px] -translate-x-1/2 bg-[url('/onboarding-background.png')] bg-[length:auto_120%] bg-top bg-no-repeat shadow-[0_0_90px_rgba(93,22,136,0.16)]">
         <div className="absolute inset-0 bg-black/20" />
       </div>
       <section
