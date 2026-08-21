@@ -1,5 +1,5 @@
-import { LoginScreen } from "@/features/auth/components/onboarding-flow";
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  return <LoginScreen />;
+export default function HomePage() {
+  redirect("/login");
 }

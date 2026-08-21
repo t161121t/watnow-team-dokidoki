@@ -1,6 +1,6 @@
 # features/
 
-ドメイン単位（`auth` / `groups` / `secrets` / `auctions` / `wallet` / `challenges`）でコードを分ける。詳細は [`docs/アーキテクチャ.md`](../docs/アーキテクチャ.md)。
+ドメイン単位（`auth` / `groups` / `secrets` / `auctions` / `wallet` / `challenges` / `users`）でコードを分ける。詳細は [`docs/アーキテクチャ.md`](../docs/アーキテクチャ.md)。
 
 `auth`のみDB.mdのテーブル区分に対応しない横断的なドメイン（サインイン/サインアウト、オンボーディングでのプロフィール作成）。他ドメインと同じ3層構成に揃えている。
 
