@@ -6,7 +6,8 @@
 // のレビュー指摘で確認済み）。bid_count / rank（count(*)・RANK()の結果=int8）は、
 // $queryRawの返り値型を決めるのはPrisma Client自体のデシリアライズ挙動であり
 // （standalone pgドライバのデフォルト設定は無関係）、Prismaはint8をbigintとして
-// 返すためbigint型とする（PR #56レビュー指摘）。React FlightはbigintをそのままServer
+// 返すためbigint型とする（PR #56レビュー指摘、npm run verify:auctionsの実DB
+// 実行で実際にbigintで返ることを確認済み）。React FlightはbigintをそのままServer
 // Actionsの返り値としてシリアライズできる（node_modules/next/dist/compiled/
 // react-server-dom-webpack内で確認）。
 

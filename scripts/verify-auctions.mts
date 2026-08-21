@@ -12,13 +12,14 @@
  *
  * 実行: npm run verify:auctions
  *
- * 2026-08-20: 実装時にサンドボックス環境からSupabase開発用DBへの直接接続が
- * 到達不能だったため、このスクリプト自体はまだ実行できていない（プロジェクト
- * 自体は稼働中。サンドボックス固有のネットワーク/DNS問題と判明）。
- * 代わりにSupabase MCPのapply_migration（一時的な書き込み→即削除）で
- * このスクリプトと同じ検証項目を実施し、全項目パスを確認済み（PR #56参照）。
- * サンドボックスの直接DB接続が復旧したら、このスクリプト自体も一度実行して
- * 二重に確認すること。
+ * 2026-08-21: 実行結果、全項目パス確認済み（PR #56参照）。
+ *
+ * 補足: db.<project-ref>.supabase.co:5432（直接接続）はAAAAレコード（IPv6）
+ * のみでAレコード（IPv4）を持たないため、IPv6の外向き経路がないサンドボックス
+ * 環境からは到達不能。Connection Pooling（Transaction pooler、
+ * aws-0-<region>.pooler.supabase.com:6543、IPv4対応）経由のDATABASE_URL
+ * （`?pgbouncer=true&sslmode=require&uselibpqcompat=true`が必要）に一時的に
+ * 切り替えることで、このスクリプト自体を直接実行できる。
  */
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
