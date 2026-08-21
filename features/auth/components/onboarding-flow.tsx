@@ -1,0 +1,152 @@
+"use client";
+
+import Image from "next/image";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { LoginInput } from "@/features/auth/validation";
+import { loginSchema } from "@/features/auth/validation";
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+
+  return (
+    <p
+      id={id}
+      className="mt-1.5 text-[13px] leading-normal font-bold text-[#ffb4c9]"
+      role="alert"
+    >
+      {message}
+    </p>
+  );
+}
+
+export function LoginScreen() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const form = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+    mode: "onTouched",
+  });
+
+  const submitLogin = () => {
+    setIsSubmitting(true);
+    window.setTimeout(() => setIsSubmitting(false), 450);
+  };
+
+  return (
+    <main className="min-h-svh bg-black text-white">
+      <section
+        className="relative mx-auto h-[max(880px,100svh)] w-[402px] max-w-full overflow-hidden bg-black"
+        data-node-id="178:39"
+        aria-labelledby="login-title"
+      >
+        <Image
+          src="/onboarding-background.png"
+          alt=""
+          fill
+          priority
+          sizes="(max-width: 402px) 100vw, 402px"
+          className="pointer-events-none object-cover object-bottom"
+        />
+
+        <h1
+          id="login-title"
+          className="absolute top-[133px] left-[39px] w-[324px] whitespace-nowrap text-[36px] leading-normal font-bold [font-family:var(--font-noto-sans-jp)] [text-shadow:0_0_14px_rgba(208,66,255,0.9),0_0_50px_rgba(138,43,226,0.5)]"
+        >
+          秘密オークションへ
+        </h1>
+        <p className="absolute top-[193px] left-[128px] w-[145px] whitespace-nowrap text-[36px] leading-normal font-bold [font-family:var(--font-noto-sans-jp)] [text-shadow:0_0_14px_rgba(208,66,255,0.9),0_0_50px_rgba(138,43,226,0.5)]">
+          ようこそ
+        </p>
+
+        <form
+          id="login-form"
+          className="absolute top-[278px] left-[37px] flex w-[342px] flex-col gap-6"
+          onSubmit={form.handleSubmit(submitLogin)}
+          noValidate
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="email"
+              className="text-[14px] leading-normal font-bold text-white [font-family:var(--font-noto-sans-jp)]"
+            >
+              メールアドレス
+            </Label>
+            <Input
+              {...form.register("email")}
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              aria-invalid={Boolean(form.formState.errors.email)}
+              aria-describedby={form.formState.errors.email ? "email-error" : undefined}
+              className="h-14 rounded-2xl border-[1.5px] border-[#c038ff] bg-black/60 px-4 py-[13px] text-[13.5px] leading-normal font-normal text-white shadow-[0_0_16px_0_#d042ff] placeholder:text-[#8a8377] focus-visible:border-[#c038ff] focus-visible:ring-0 [font-family:var(--font-nunito)]"
+            />
+            <FieldError id="email-error" message={form.formState.errors.email?.message} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="password"
+              className="text-[14px] leading-normal font-bold text-white [font-family:var(--font-noto-sans-jp)]"
+            >
+              パスワード
+            </Label>
+            <Input
+              {...form.register("password")}
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              aria-invalid={Boolean(form.formState.errors.password)}
+              aria-describedby={form.formState.errors.password ? "password-error" : undefined}
+              className="h-14 rounded-2xl border-[1.5px] border-[#c038ff] bg-black/60 px-4 py-[13px] text-[13.5px] leading-normal font-normal text-white shadow-[0_0_16px_0_#d042ff] placeholder:text-[#8a8377] focus-visible:border-[#c038ff] focus-visible:ring-0 [font-family:var(--font-nunito)]"
+            />
+            <FieldError
+              id="password-error"
+              message={form.formState.errors.password?.message}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="self-end bg-transparent p-0 text-[14px] leading-normal font-bold text-white [font-family:var(--font-noto-sans-jp)]"
+          >
+            パスワードを忘れた方はこちら
+          </button>
+        </form>
+
+        <Button
+          form="login-form"
+          type="submit"
+          disabled={isSubmitting}
+          aria-busy={isSubmitting}
+          className="absolute top-[536px] left-[30px] h-[77px] w-[342px] rounded-full border-2 border-[#c038ff] bg-black py-[15px] text-[20px] leading-normal font-bold text-white shadow-[0_0_50px_0_rgba(138,43,226,0.4),0_0_16px_2px_rgba(192,56,255,0.8)] hover:bg-black focus-visible:border-[#c038ff] focus-visible:ring-0 [font-family:var(--font-noto-sans-jp)]"
+        >
+          {isSubmitting ? "ログイン中…" : "ログイン"}
+        </Button>
+
+        <div
+          className="absolute top-[637px] left-[30px] flex h-[47px] w-[342px] items-center gap-2.5 overflow-hidden text-[14px] leading-normal font-medium text-white [font-family:var(--font-noto-sans-jp)]"
+          aria-hidden="true"
+        >
+          <span className="h-[1.5px] min-w-px flex-1 bg-[#b75ee3]" />
+          または
+          <span className="h-[1.5px] min-w-px flex-1 bg-[#b75ee3]" />
+        </div>
+
+        <p className="absolute top-[696px] left-[30px] flex w-[342px] items-start justify-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] leading-normal text-white [font-family:var(--font-noto-sans-jp)]">
+          <span className="font-medium">アカウントをお持ちでない方は</span>
+          <button type="button" className="bg-transparent p-0 font-bold text-white">
+            新規登録
+          </button>
+        </p>
+      </section>
+    </main>
+  );
+}
