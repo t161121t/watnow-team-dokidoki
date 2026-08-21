@@ -19,9 +19,20 @@ export function ScreenHeader({
         {backHref ? (
           <Link
             href={backHref}
-            className="-ml-1 inline-flex min-h-10 shrink-0 items-center justify-center rounded-full px-1 text-xs font-bold text-white/70 transition hover:text-white"
+            aria-label="前の画面へ戻る"
+            className="-ml-2 inline-flex size-10 shrink-0 items-center justify-center text-[#c038ff] transition hover:text-[#d966ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c038ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b0e] active:translate-y-px"
           >
-            戻る
+            <svg
+              aria-hidden="true"
+              className="size-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="4"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 14-5-5 5-5" />
+              <path strokeLinecap="round" d="M4 9h9a7 7 0 0 1 7 7v1" />
+            </svg>
           </Link>
         ) : null}
         <div className="min-w-0 flex-1">
