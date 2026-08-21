@@ -1,6 +1,13 @@
 -- docs/DB.md §6.4
 -- 単一承認確定（2026-08-17）: 1件目のレビューで即 awarded/rejected。
 -- decision='rejected'時の遷移も明記（PRレビュー指摘で追加）。
+--
+-- 2026-08-22 PR #67レビュー反映: 同一ユーザーが同一challengeに対して
+-- submit_challengeを同時に2回呼ぶと、両方が「pending中の挑戦なし」を
+-- 通過してpending attemptが2件作られ、別々に承認されるとrewardが二重付与
+-- されうる（pending存在確認→INSERTがアトミックでなかったため）。
+-- pg_advisory_xact_lockで(group_id, challenge_id, user_id)単位の排他ロックを
+-- 取り、同時呼び出しを直列化する（トランザクション終了時に自動解放）。
 
 CREATE OR REPLACE FUNCTION submit_challenge(
   p_group_id uuid,
@@ -19,6 +26,8 @@ BEGIN
   IF NOT is_group_member(p_group_id) THEN
     RAISE EXCEPTION 'submit_challenge: not a member of this group';
   END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_group_id::text || ':' || p_challenge_id::text || ':' || auth.uid()::text, 0));
 
   SELECT * INTO v_challenge FROM challenges
   WHERE id = p_challenge_id AND status = 'active' AND (group_id IS NULL OR group_id = p_group_id);
