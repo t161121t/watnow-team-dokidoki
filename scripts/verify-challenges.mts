@@ -1,13 +1,18 @@
 /**
- * features/challenges/server/* → prisma/sql/challenges/*.sql（submit_challenge /
- * approve_challenge / create_group_challenge）と、RPC/Viewを経由しない読み取り
- * 2関数（getGroupChallenges / getGroupChallengeAttempts）を実DBに対して検証する。
- * Vitest等の自動テストは未導入（技術選定.md参照）のため、暫定的にここに置く。
+ * features/challenges/server/* の5関数（submitChallenge / approveChallenge /
+ * createGroupChallenge / getGroupChallenges / getGroupChallengeAttempts）を
+ * 実DBに対して検証する。Vitest等の自動テストは未導入（技術選定.md参照）の
+ * ため、暫定的にここに置く。
  *
- * 他のverifyスクリプトと同様、RPCはwithRlsContext経由の生SQLで直接叩く
- * （features/challenges/server/*はserver-onlyが付いておりtsx実行環境からは
- * importできないため。呼び出しているSQL文自体は同一）。読み取り2関数は
- * 素のPrismaクエリのため、prisma model呼び出しをそのまま使う。
+ * server/*.tsにはserver-onlyが付いており、通常のtsx実行だと
+ * 「This module cannot be imported from a Client Component module」で
+ * importに失敗する（server-onlyパッケージのexportsが"react-server"条件で
+ * 空ファイルに、それ以外はthrowするindex.jsに解決されるため）。
+ * package.jsonのverify:challengesスクリプトで`tsx --conditions=react-server`
+ * を使い、"react-server"条件を有効にすることでこの制約を回避し、
+ * 生SQLの再実装ではなく実際にexportされている関数を直接呼ぶ形にしている
+ * （2026-08-22 PRレビュー指摘: 生SQLの再実装だとactions.ts/server/の引数順・
+ * cast・配線が壊れてもこのスクリプトは気づけない、という問題への対応）。
  *
  * 各ガードの検証は、そのガードが無効化されても他のガードに隠れて偽陽性に
  * ならないよう、成立条件を切り分けて設計している（PR #56のCodexレビュー
@@ -19,6 +24,11 @@
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
 import { withRlsContext } from "@/lib/db/rls";
+import { submitChallenge } from "@/features/challenges/server/submit-challenge";
+import { approveChallenge } from "@/features/challenges/server/approve-challenge";
+import { createGroupChallenge } from "@/features/challenges/server/create-group-challenge";
+import { getGroupChallenges } from "@/features/challenges/server/get-group-challenges";
+import { getGroupChallengeAttempts } from "@/features/challenges/server/get-group-challenge-attempts";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -69,31 +79,18 @@ async function main() {
 
   // --- create_group_challenge ---
   await assertRejects(
-    () =>
-      withRlsContext(submitter, (tx) =>
-        tx.$executeRaw`SELECT create_group_challenge(${groupId}::uuid, ${"不正な作成"}::text, NULL, ${0}::int, ${false}::boolean, NULL)`,
-      ),
+    () => createGroupChallenge(submitter, groupId, "不正な作成", null, 0, false, null),
     "create_group_challenge: admin以外は作成できない",
   );
 
-  const [challengeA] = await withRlsContext(admin, (tx) =>
-    tx.$queryRaw<{ id: string; status: string }[]>`
-      SELECT * FROM create_group_challenge(${groupId}::uuid, ${"チャレンジA（通常）"}::text, NULL, ${15}::int, ${false}::boolean, NULL)
-    `,
-  );
+  const challengeA = await createGroupChallenge(admin, groupId, "チャレンジA（通常）", null, 15, false, null);
   assert(challengeA.status === "active", "create_group_challenge: statusがactiveになる");
 
-  const [challengeB] = await withRlsContext(admin, (tx) =>
-    tx.$queryRaw<{ id: string }[]>`
-      SELECT * FROM create_group_challenge(${groupId}::uuid, ${"チャレンジB（cooldown）"}::text, NULL, ${10}::int, ${false}::boolean, ${3600}::int)
-    `,
-  );
-
-  const [challengeC] = await withRlsContext(admin, (tx) =>
-    tx.$queryRaw<{ id: string }[]>`
-      SELECT * FROM create_group_challenge(${groupId}::uuid, ${"チャレンジC（証跡必須）"}::text, NULL, ${5}::int, ${true}::boolean, NULL)
-    `,
-  );
+  const challengeB = await createGroupChallenge(admin, groupId, "チャレンジB（cooldown）", null, 10, false, 3600);
+  const challengeC = await createGroupChallenge(admin, groupId, "チャレンジC（証跡必須）", null, 5, true, null);
+  // 並行送信の直列化を検証する専用チャレンジ（cooldown無し。既存挑戦の有無で
+  // 挙動が変わらないよう、他のテストで使い回さない）
+  const challengeD = await createGroupChallenge(admin, groupId, "チャレンジD（並行送信テスト用）", null, 8, false, null);
 
   const systemChallenge = await prisma.challenge.create({
     data: {
@@ -110,78 +107,68 @@ async function main() {
 
   // --- submit_challenge ---
   await assertRejects(
-    () =>
-      withRlsContext(outsider, (tx) =>
-        tx.$executeRaw`SELECT submit_challenge(${groupId}::uuid, ${challengeA.id}::uuid, NULL::text)`,
-      ),
+    () => submitChallenge(outsider, groupId, challengeA.id, null),
     "submit_challenge: グループ外は挑戦できない",
   );
 
   await assertRejects(
-    () =>
-      withRlsContext(otherGroupAdmin, (tx) =>
-        tx.$executeRaw`SELECT submit_challenge(${otherGroupId}::uuid, ${challengeA.id}::uuid, NULL::text)`,
-      ),
+    () => submitChallenge(otherGroupAdmin, otherGroupId, challengeA.id, null),
     "submit_challenge: 別グループのgroup-specificチャレンジには挑戦できない",
   );
 
   await assertRejects(
-    () =>
-      withRlsContext(submitter, (tx) =>
-        tx.$executeRaw`SELECT submit_challenge(${groupId}::uuid, ${challengeC.id}::uuid, NULL::text)`,
-      ),
+    () => submitChallenge(submitter, groupId, challengeC.id, null),
     "submit_challenge: 証跡必須チャレンジはevidence_path無しで挑戦できない",
   );
 
-  const [attemptC] = await withRlsContext(submitter, (tx) =>
-    tx.$queryRaw<{ id: string; status: string }[]>`
-      SELECT * FROM submit_challenge(${groupId}::uuid, ${challengeC.id}::uuid, ${"evidence.jpg"}::text)
-    `,
-  );
+  const attemptC = await submitChallenge(submitter, groupId, challengeC.id, "evidence.jpg");
   assert(attemptC.status === "pending", "submit_challenge: 証跡付きなら挑戦できる（status=pending）");
 
-  const [attempt1A] = await withRlsContext(submitter, (tx) =>
-    tx.$queryRaw<{ id: string; status: string }[]>`
-      SELECT * FROM submit_challenge(${groupId}::uuid, ${challengeA.id}::uuid, NULL::text)
-    `,
-  );
+  const attempt1A = await submitChallenge(submitter, groupId, challengeA.id, null);
   assert(attempt1A.status === "pending", "submit_challenge: 通常チャレンジに挑戦できる（status=pending）");
 
   await assertRejects(
-    () =>
-      withRlsContext(submitter, (tx) =>
-        tx.$executeRaw`SELECT submit_challenge(${groupId}::uuid, ${challengeA.id}::uuid, NULL::text)`,
-      ),
+    () => submitChallenge(submitter, groupId, challengeA.id, null),
     "submit_challenge: 同じチャレンジにpending中の挑戦がある間は再挑戦できない",
   );
 
-  const [attempt1B] = await withRlsContext(submitter, (tx) =>
-    tx.$queryRaw<{ id: string; status: string }[]>`
-      SELECT * FROM submit_challenge(${groupId}::uuid, ${challengeB.id}::uuid, NULL::text)
-    `,
-  );
+  const attempt1B = await submitChallenge(submitter, groupId, challengeB.id, null);
   assert(attempt1B.status === "pending", "submit_challenge: cooldown付きチャレンジにも初回は挑戦できる");
 
-  // --- 読み取り: pendingキュー（承認前の時点で確認） ---
-  const pendingAttempts = await withRlsContext(reviewer, (tx) =>
-    tx.challengeAttempt.findMany({ where: { groupId, status: "pending" } }),
+  // --- 並行送信: 同一(group, challenge, user)への同時submitは1件だけ成功する ---
+  // pg_advisory_xact_lockで直列化しているため（002_submit_and_review.sql）、
+  // 2つの呼び出しは順番に処理され、後者は「pending中の挑戦あり」で必ずreject
+  // される想定（PR #67レビュー指摘: 二重付与を防ぐ不変条件の検証）。
+  const concurrentResults = await Promise.allSettled([
+    submitChallenge(submitter, groupId, challengeD.id, null),
+    submitChallenge(submitter, groupId, challengeD.id, null),
+  ]);
+  const fulfilledCount = concurrentResults.filter((r) => r.status === "fulfilled").length;
+  const rejectedCount = concurrentResults.filter((r) => r.status === "rejected").length;
+  assert(
+    fulfilledCount === 1 && rejectedCount === 1,
+    `submit_challenge: 同時送信は1件だけ成功する（成功:${fulfilledCount}件、失敗:${rejectedCount}件）`,
   );
-  assert(pendingAttempts.length === 3, "getGroupChallengeAttempts相当: pending中の挑戦が3件見える");
+  const concurrentAttempts = await prisma.challengeAttempt.findMany({
+    where: { groupId, challengeId: challengeD.id, userId: submitter },
+  });
+  assert(
+    concurrentAttempts.length === 1,
+    `submit_challenge: 同時送信でもDB上のattemptは1件だけ（実際:${concurrentAttempts.length}件）`,
+  );
+
+  // --- 読み取り: pendingキュー（承認前の時点で確認） ---
+  const pendingAttempts = await getGroupChallengeAttempts(reviewer, groupId, { status: "pending" });
+  assert(pendingAttempts.length === 4, "getGroupChallengeAttempts: pending中の挑戦が4件見える");
 
   // --- approve_challenge ---
   await assertRejects(
-    () =>
-      withRlsContext(submitter, (tx) =>
-        tx.$executeRaw`SELECT approve_challenge(${attempt1A.id}::uuid, 'approved'::approval_decision)`,
-      ),
+    () => approveChallenge(submitter, attempt1A.id, "approved"),
     "approve_challenge: 自分の挑戦は自分で承認できない",
   );
 
   await assertRejects(
-    () =>
-      withRlsContext(outsider, (tx) =>
-        tx.$executeRaw`SELECT approve_challenge(${attempt1A.id}::uuid, 'approved'::approval_decision)`,
-      ),
+    () => approveChallenge(outsider, attempt1A.id, "approved"),
     "approve_challenge: グループ外は承認できない",
   );
 
@@ -189,11 +176,7 @@ async function main() {
     where: { groupId_userId: { groupId, userId: submitter } },
   });
 
-  const [approvedA] = await withRlsContext(reviewer, (tx) =>
-    tx.$queryRaw<{ status: string; reward_points: number; reviewed_by: string; awarded_ledger_id: string }[]>`
-      SELECT * FROM approve_challenge(${attempt1A.id}::uuid, 'approved'::approval_decision)
-    `,
-  );
+  const approvedA = await approveChallenge(reviewer, attempt1A.id, "approved");
   assert(approvedA.status === "awarded", "approve_challenge: 承認するとstatusがawardedになる");
   assert(approvedA.reward_points === 15, "approve_challenge: reward_pointsがチャレンジの値で確定する");
   assert(approvedA.reviewed_by === reviewer, "approve_challenge: reviewed_byが承認者になる");
@@ -208,18 +191,11 @@ async function main() {
   );
 
   await assertRejects(
-    () =>
-      withRlsContext(reviewer, (tx) =>
-        tx.$executeRaw`SELECT approve_challenge(${attempt1A.id}::uuid, 'approved'::approval_decision)`,
-      ),
+    () => approveChallenge(reviewer, attempt1A.id, "approved"),
     "approve_challenge: 既にレビュー済みの挑戦は再レビューできない",
   );
 
-  const [rejectedC] = await withRlsContext(reviewer, (tx) =>
-    tx.$queryRaw<{ status: string; reward_points: number | null; awarded_ledger_id: string | null }[]>`
-      SELECT * FROM approve_challenge(${attemptC.id}::uuid, 'rejected'::approval_decision)
-    `,
-  );
+  const rejectedC = await approveChallenge(reviewer, attemptC.id, "rejected");
   assert(rejectedC.status === "rejected", "approve_challenge: 却下するとstatusがrejectedになる");
   assert(rejectedC.awarded_ledger_id === null, "approve_challenge: 却下時はawarded_ledger_idが設定されない");
 
@@ -231,57 +207,54 @@ async function main() {
     "approve_challenge: 却下時はwalletのbalanceが変化しない",
   );
 
-  const [approvedB] = await withRlsContext(reviewer, (tx) =>
-    tx.$queryRaw<{ status: string }[]>`
-      SELECT * FROM approve_challenge(${attempt1B.id}::uuid, 'approved'::approval_decision)
-    `,
-  );
+  const approvedB = await approveChallenge(reviewer, attempt1B.id, "approved");
   assert(approvedB.status === "awarded", "approve_challenge: cooldown付きチャレンジの挑戦も承認できる");
+
+  // 並行送信テストで生き残った方のattemptも片付けておく（以降のgetGroupChallengeAttempts
+  // の件数計算をシンプルに保つため）
+  const [survivingConcurrentAttempt] = concurrentAttempts;
+  await approveChallenge(reviewer, survivingConcurrentAttempt.id, "rejected");
 
   // --- cooldown（既存挑戦がpendingでなくなった後でも、cooldown中は再挑戦できないことを確認） ---
   await assertRejects(
-    () =>
-      withRlsContext(submitter, (tx) =>
-        tx.$executeRaw`SELECT submit_challenge(${groupId}::uuid, ${challengeB.id}::uuid, NULL::text)`,
-      ),
+    () => submitChallenge(submitter, groupId, challengeB.id, null),
     "submit_challenge: 前回の挑戦がpendingでなくなっていてもcooldown中は再挑戦できない",
   );
 
-  // --- 読み取り: getGroupChallenges相当 ---
-  const challengesForMember = await withRlsContext(submitter, (tx) =>
-    tx.challenge.findMany({
-      where: { status: "active", OR: [{ groupId: null }, { groupId }] },
-      orderBy: { createdAt: "asc" },
-    }),
-  );
+  // --- 読み取り: getGroupChallenges ---
+  // 開発用DBに既存の（このスクリプト無関係の）active challengeが残っている
+  // 場合でも壊れないよう、グローバルな件数ではなく期待するIDの含有/非含有で
+  // 検証する（2026-08-22 PRレビュー指摘）。
+  const challengesForMember = await getGroupChallenges(submitter, groupId);
+  const memberIds = challengesForMember.map((c) => c.id);
   assert(
-    challengesForMember.length === 4,
-    "getGroupChallenges相当: グループメンバーにはsystem+group-specificの4件が見える",
+    [systemChallenge.id, challengeA.id, challengeB.id, challengeC.id, challengeD.id].every((id) =>
+      memberIds.includes(id),
+    ),
+    "getGroupChallenges: グループメンバーにはsystem+group-specificが見える",
   );
 
-  const challengesForOutsider = await withRlsContext(outsider, (tx) =>
-    tx.challenge.findMany({
-      where: { status: "active", OR: [{ groupId: null }, { groupId }] },
-      orderBy: { createdAt: "asc" },
-    }),
+  const challengesForOutsider = await getGroupChallenges(outsider, groupId);
+  const outsiderIds = challengesForOutsider.map((c) => c.id);
+  assert(
+    outsiderIds.includes(systemChallenge.id),
+    "getGroupChallenges: グループ外にもsystem challengeは見える",
   );
   assert(
-    challengesForOutsider.length === 1 && challengesForOutsider[0].id === systemChallenge.id,
-    "getGroupChallenges相当: グループ外にはsystem challengeの1件だけ見える（RLS境界）",
+    ![challengeA.id, challengeB.id, challengeC.id, challengeD.id].some((id) => outsiderIds.includes(id)),
+    "getGroupChallenges: グループ外にはgroup-specificチャレンジは見えない（RLS境界）",
   );
 
-  // --- 読み取り: getGroupChallengeAttempts相当（全件・ユーザー絞り込み） ---
-  const allAttempts = await withRlsContext(reviewer, (tx) =>
-    tx.challengeAttempt.findMany({ where: { groupId } }),
-  );
-  assert(allAttempts.length === 3, "getGroupChallengeAttempts相当: グループ内の全挑戦が3件見える");
+  // --- 読み取り: getGroupChallengeAttempts（全件・ユーザー絞り込み） ---
+  // attemptC/attempt1A/attempt1B + 並行送信テストで実際にINSERTされた1件（もう
+  // 1件はDB書き込み前にreject）の計4件
+  const allAttempts = await getGroupChallengeAttempts(reviewer, groupId);
+  assert(allAttempts.length === 4, "getGroupChallengeAttempts: グループ内の全挑戦が4件見える");
 
-  const submitterAttempts = await withRlsContext(reviewer, (tx) =>
-    tx.challengeAttempt.findMany({ where: { groupId, userId: submitter } }),
-  );
+  const submitterAttempts = await getGroupChallengeAttempts(reviewer, groupId, { userId: submitter });
   assert(
-    submitterAttempts.length === 3,
-    "getGroupChallengeAttempts相当: userId指定で本人の挑戦だけに絞り込める",
+    submitterAttempts.length === 4,
+    "getGroupChallengeAttempts: userId指定で本人の挑戦だけに絞り込める",
   );
 
   console.log("\nALL CHECKS PASSED");
