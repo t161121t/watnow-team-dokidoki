@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -41,21 +40,15 @@ export function LoginScreen() {
   };
 
   return (
-    <main className="min-h-svh bg-black text-white">
+    <main className="relative min-h-svh overflow-x-hidden bg-black text-white">
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-full max-w-[520px] -translate-x-1/2 bg-[url('/onboarding-background.png')] bg-[length:auto_120%] bg-bottom bg-no-repeat shadow-[0_0_90px_rgba(93,22,136,0.16)]">
+        <div className="absolute inset-0 bg-black/20" />
+      </div>
       <section
-        className="relative mx-auto h-[max(880px,100svh)] w-[402px] max-w-full overflow-hidden bg-black"
+        className="relative mx-auto h-[max(880px,100svh)] w-[402px] max-w-full overflow-hidden bg-transparent"
         data-node-id="178:39"
         aria-labelledby="login-title"
       >
-        <Image
-          src="/onboarding-background.png"
-          alt=""
-          fill
-          priority
-          sizes="(max-width: 402px) 100vw, 402px"
-          className="pointer-events-none object-cover object-bottom"
-        />
-
         <h1
           id="login-title"
           className="absolute top-[133px] left-1/2 w-[min(324px,calc(100%-60px))] -translate-x-1/2 whitespace-nowrap text-center text-[clamp(31px,8.95vw,36px)] leading-normal font-bold [font-family:var(--font-noto-sans-jp)] [text-shadow:0_0_14px_rgba(208,66,255,0.9),0_0_50px_rgba(138,43,226,0.5)]"
