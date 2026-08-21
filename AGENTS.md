@@ -102,6 +102,7 @@
 | `npm run verify:storage` | `avatars`バケットのRLSが実DBで正しく効くかを検証（実際のアップロードAPI呼び出しは対象外） |
 | `npm run verify:groups` | groupsドメインのRPC（search_users/decline_invite/leave_group等・最後のadminガード）を実DBで検証 |
 | `npm run verify:secrets` | secretsドメインのRPC・View（register_secret/list_secret_for_auction/my_secret_collection_view等）を実DBで検証 |
+| `npm run verify:auctions` | auctionsドメインのRPC・View（decline_dealer/place_bidのガード・3つのView）を実DBで検証 |
 | `npm run verify:rls` | `withRlsContext` がRLSを正しく効かせるかを実DBで検証（テストユーザーを作成・削除） |
 | `npm run verify:auction` | 出品〜入札〜落札確定（次点繰り上げ含む）を実DBで通しで検証 |
 
