@@ -3,11 +3,12 @@
 // 定義が重複するが意図的（features/README.md参照）。
 //
 // timestamptz列は$queryRaw経由だとDateオブジェクトで返る（features/groups/types.ts
-// のレビュー指摘で確認済み）。bid_count / rank（count(*)・RANK()の結果）はpgドライバの
-// デフォルト挙動だとint8はstringで返るはずだが未検証（2026-08-20、サンドボックス
-// 環境からSupabase開発用DBへの直接接続が到達不能だったため。プロジェクト自体は
-// 稼働中で、Supabase MCP経由の代替検証では他の項目は全てパス済み。PR #56参照）。
-// サンドボックスの直接DB接続が復旧したら scripts/verify-auctions.mts で確認すること。
+// のレビュー指摘で確認済み）。bid_count / rank（count(*)・RANK()の結果=int8）は、
+// $queryRawの返り値型を決めるのはPrisma Client自体のデシリアライズ挙動であり
+// （standalone pgドライバのデフォルト設定は無関係）、Prismaはint8をbigintとして
+// 返すためbigint型とする（PR #56レビュー指摘）。React FlightはbigintをそのままServer
+// Actionsの返り値としてシリアライズできる（node_modules/next/dist/compiled/
+// react-server-dom-webpack内で確認）。
 
 export type AuctionStatus =
   | "pending_dealer_approval"
@@ -66,8 +67,8 @@ export type AuctionPublicViewRow = {
   current_price: number;
   starts_at: Date | null;
   ends_at: Date | null;
-  // count(*)の結果。pgドライバのデフォルトだとint8はstringで返るはずだが未検証。
-  bid_count: string;
+  // count(*)の結果（int8）。Prismaはbigintとして返す。
+  bid_count: bigint;
 };
 
 export type BidderIdentifiedViewRow = {
@@ -83,6 +84,6 @@ export type AnonymousBidFeedViewRow = {
   auction_id: string;
   amount: number;
   created_at: Date;
-  // RANK()の結果。bid_countと同じ理由でstringと仮定（未検証）。
-  rank: string;
+  // RANK()の結果（int8）。bid_countと同じ理由でbigint。
+  rank: bigint;
 };

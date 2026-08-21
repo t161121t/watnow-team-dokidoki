@@ -18,7 +18,7 @@
  * 代わりにSupabase MCPのapply_migration（一時的な書き込み→即削除）で
  * このスクリプトと同じ検証項目を実施し、全項目パスを確認済み（PR #56参照）。
  * サンドボックスの直接DB接続が復旧したら、このスクリプト自体も一度実行して
- * 二重に確認すること（特にbid_count/rankのJS型は未検証。下記types.ts参照）。
+ * 二重に確認すること。
  */
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
@@ -99,6 +99,22 @@ async function main() {
     "decline_dealer: グループ外は辞退できない",
   );
 
+  // dealer_id一致チェックが先に走るため、上のoutsiderテストではmembershipガード
+  // （is_group_member）自体は通っていない。dealer1本人を一時的にkicked扱いにして
+  // membershipガードそのものを確認する（PR #56レビュー指摘）。
+  await prisma.groupMember.update({
+    where: { groupId_userId: { groupId, userId: dealer1 } },
+    data: { status: "kicked" },
+  });
+  await assertRejects(
+    () => withRlsContext(dealer1, (tx) => tx.$executeRaw`SELECT decline_dealer(${auctionId}::uuid)`),
+    "decline_dealer: dealer_id一致でも脱退/kick済みなら辞退できない",
+  );
+  await prisma.groupMember.update({
+    where: { groupId_userId: { groupId, userId: dealer1 } },
+    data: { status: "active" },
+  });
+
   const dealer1WalletBefore = await prisma.wallet.findUniqueOrThrow({
     where: { groupId_userId: { groupId, userId: dealer1 } },
   });
@@ -142,6 +158,10 @@ async function main() {
   assert(itemAfterApproval.status === "on_auction", "approve_dealer_assignment: secret_group_itemsがon_auctionになる");
 
   // --- place_bid のガード ---
+  // 出品者の残高はlisting_prepay（100pt）のみで、110ptの入札額を下回る。
+  // このままだと自出品ガードが壊れていても「残高不足」で拒否され偽陽性になる
+  // （PR #56レビュー指摘）ため、自出品ガード自体を切り分けられるよう十分な残高を積む。
+  await prisma.wallet.update({ where: { groupId_userId: { groupId, userId: seller } }, data: { balance: 300 } });
   await assertRejects(
     () => withRlsContext(seller, (tx) => tx.$executeRaw`SELECT place_bid(${auctionId}::uuid, ${110}::int)`),
     "place_bid: 出品者は自出品に入札できない",
@@ -171,12 +191,12 @@ async function main() {
 
   // --- auction_public_view ---
   const publicView = await withRlsContext(seller, (tx) =>
-    tx.$queryRaw<{ auction_id: string; bid_count: string; current_price: number }[]>`
+    tx.$queryRaw<{ auction_id: string; bid_count: bigint; current_price: number }[]>`
       SELECT * FROM auction_public_view WHERE auction_id = ${auctionId}::uuid
     `,
   );
   assert(publicView.length === 1, "auction_public_view: グループメンバーから見える");
-  assert(Number(publicView[0].bid_count) === 1, "auction_public_view: bid_countが正しい");
+  assert(publicView[0].bid_count === BigInt(1), "auction_public_view: bid_countが正しい");
   assert(publicView[0].current_price === 110, "auction_public_view: current_priceが正しい");
 
   const publicViewForOutsider = await withRlsContext(outsider, (tx) =>
@@ -209,7 +229,7 @@ async function main() {
 
   // --- anonymous_bid_feed_view ---
   const anonymousForBidder = await withRlsContext(bidder, (tx) =>
-    tx.$queryRaw<{ amount: number; rank: string }[]>`
+    tx.$queryRaw<{ amount: number; rank: bigint }[]>`
       SELECT * FROM anonymous_bid_feed_view WHERE auction_id = ${auctionId}::uuid
     `,
   );
@@ -217,7 +237,7 @@ async function main() {
     anonymousForBidder.length === 1 && anonymousForBidder[0].amount === 110,
     "anonymous_bid_feed_view: 金額は見える（bidder_idは列に含まれない）",
   );
-  assert(Number(anonymousForBidder[0].rank) === 1, "anonymous_bid_feed_view: rankが正しい");
+  assert(anonymousForBidder[0].rank === BigInt(1), "anonymous_bid_feed_view: rankが正しい");
 
   console.log("\nALL CHECKS PASSED");
 }
