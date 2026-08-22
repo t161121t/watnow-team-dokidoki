@@ -240,6 +240,47 @@ async function main() {
   );
   assert(anonymousForBidder[0].rank === BigInt(1), "anonymous_bid_feed_view: rankが正しい");
 
+  // --- getMyDealerAuctions相当（features/auctions/server/get-my-dealer-auctions.ts） ---
+  const dealerAuctions = await withRlsContext(dealer1, (tx) =>
+    tx.$queryRaw<{ auction_id: string }[]>`
+      SELECT * FROM auction_public_view WHERE group_id = ${groupId}::uuid AND dealer_id = ${dealer1}::uuid
+    `,
+  );
+  assert(
+    dealerAuctions.some((row) => row.auction_id === auctionId),
+    "getMyDealerAuctions相当: dealer_id=自分の案件がauction_public_view経由で取れる",
+  );
+  const bidderAsDealerQuery = await withRlsContext(bidder, (tx) =>
+    tx.$queryRaw<{ auction_id: string }[]>`
+      SELECT * FROM auction_public_view WHERE group_id = ${groupId}::uuid AND dealer_id = ${bidder}::uuid
+    `,
+  );
+  assert(
+    bidderAsDealerQuery.length === 0,
+    "getMyDealerAuctions相当: ディーラーでない入札者は0件",
+  );
+
+  // --- getMyWinningAuctionIds相当（features/auctions/server/get-my-winning-auction-ids.ts） ---
+  // open中はbids.statusが'winning'にならない（finalize時のみ）ため、
+  // 自分の入札額 === auction.current_price を見て判定する設計を検証する。
+  const myBidsOpen = await withRlsContext(bidder, (tx) =>
+    tx.bid.findMany({
+      where: { groupId, bidderId: bidder, status: "valid" },
+      select: { auctionId: true, amount: true, auction: { select: { status: true, currentPrice: true } } },
+    }),
+  );
+  const winningIds = myBidsOpen
+    .filter((row) => row.auction.status === "open" && row.amount === row.auction.currentPrice)
+    .map((row) => row.auctionId);
+  assert(
+    winningIds.includes(auctionId),
+    "getMyWinningAuctionIds相当: open中に自分の入札額=current_priceなら「最高入札者」と判定できる",
+  );
+  const sellerBidsOpen = await withRlsContext(seller, (tx) =>
+    tx.bid.findMany({ where: { groupId, bidderId: seller, status: "valid" } }),
+  );
+  assert(sellerBidsOpen.length === 0, "getMyWinningAuctionIds相当: 入札していないユーザーは0件");
+
   console.log("\nALL CHECKS PASSED");
 }
 

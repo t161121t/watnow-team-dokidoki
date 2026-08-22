@@ -4,13 +4,12 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Auction } from "@/lib/types/auction";
-import type { Group } from "@/lib/types/group";
 
 export function AuctionListScreen({
-  group,
+  groupId,
   auctions,
 }: {
-  group: Group;
+  groupId: string;
   auctions: Auction[];
 }) {
   return (
@@ -21,7 +20,7 @@ export function AuctionListScreen({
           <AuctionCard key={auction.id} auction={auction} />
         ))}
       </div>
-      <BottomNavigation items={getGroupNavigation(group.id)} active="auctions" />
+      <BottomNavigation items={getGroupNavigation(groupId)} active="auctions" />
     </MobileShell>
   );
 }

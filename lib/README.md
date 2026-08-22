@@ -11,6 +11,7 @@
 | `lib/supabase/storage.ts` | `avatars`バケットへの署名付きアップロードURL発行（`createAvatarUploadUrl`）。user avatar / group icon 共用で、どちらの用途かはここでは判断しない。認証確認は持たない（呼び出し元の`actions.ts`が行う） | `features/*/actions.ts` |
 | `lib/types/*` | UIとデータ取得元の境界で共有するドメイン型 | `app/*`・`components/*`・`features/*` |
 | `lib/mocks/*` | UI表示と画面遷移確認用のTypeScript Mockデータ。実API・DB接続は持たない | `app/*` |
+| `lib/date.ts` | UIの簡易日付/時刻ラベル表示用ヘルパー（ドメイン非依存の汎用フォーマッタ） | `app/*`・`components/*`・`features/*` |
 
 ## 禁止事項
 

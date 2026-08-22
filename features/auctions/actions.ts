@@ -8,11 +8,41 @@ import { placeBid as placeBidInDb } from "@/features/auctions/server/place-bid";
 import { getAuctionList as getAuctionListInDb } from "@/features/auctions/server/get-auction-list";
 import { getBidderIdentifiedBids as getBidderIdentifiedBidsInDb } from "@/features/auctions/server/get-bidder-identified-bids";
 import { getAnonymousBidFeed as getAnonymousBidFeedInDb } from "@/features/auctions/server/get-anonymous-bid-feed";
+import { getMyDealerAuctions as getMyDealerAuctionsInDb } from "@/features/auctions/server/get-my-dealer-auctions";
+import { getMyWinningAuctionIds as getMyWinningAuctionIdsInDb } from "@/features/auctions/server/get-my-winning-auction-ids";
+import { getAuction as getAuctionInDb } from "@/features/auctions/server/get-auction";
+import { getAuctionBySecretGroupItem as getAuctionBySecretGroupItemInDb } from "@/features/auctions/server/get-auction-by-secret-group-item";
 
 function requireUserId(userId: string | null): asserts userId is string {
   if (!userId) {
     throw new Error("ログインが必要です");
   }
+}
+
+/**
+ * PostgreSQL FunctionのRAISE EXCEPTIONはPrismaの生SQLエラーとして技術的な
+ * メッセージ（P0001等）で返ってくるため、UI表示用に丸める
+ * （features/groups/actions.tsのjoinGroupViaInviteLinkと同じパターン）。
+ * 元のRAISE EXCEPTIONメッセージ一覧はprisma/sql/auctions/*.sql参照。
+ */
+function mapPlaceBidError(message: string): string {
+  if (message.includes("insufficient balance")) return "残高が不足しています";
+  if (message.includes("seller cannot bid")) return "自分の出品には入札できません";
+  if (message.includes("dealer cannot bid")) return "担当ディーラーは入札できません";
+  if (message.includes("amount must exceed")) return "現在価格を超える金額を入力してください";
+  if (message.includes("auction is not open")) return "現在は入札を受け付けていません";
+  if (message.includes("bidding window")) return "入札受付時間外です";
+  if (message.includes("not a member")) return "このグループのメンバーではありません";
+  return "入札に失敗しました";
+}
+
+function mapDealerActionError(message: string): string {
+  if (message.includes("not authorized")) return "この操作を行う権限がありません";
+  if (message.includes("no other eligible dealer")) return "他に割り当て可能なディーラーがいません";
+  if (message.includes("already open") || message.includes("not pending approval")) {
+    return "この案件は既に処理済みです";
+  }
+  return "操作に失敗しました";
 }
 
 const auctionIdSchema = z.object({ auctionId: z.string().uuid() });
@@ -26,7 +56,11 @@ export async function approveDealerAssignment(input: { auctionId: string }) {
   requireUserId(userId);
 
   const parsed = auctionIdSchema.parse(input);
-  return approveDealerAssignmentInDb(userId, parsed.auctionId);
+  try {
+    return await approveDealerAssignmentInDb(userId, parsed.auctionId);
+  } catch (error) {
+    throw new Error(mapDealerActionError(error instanceof Error ? error.message : ""));
+  }
 }
 
 /**
@@ -38,7 +72,11 @@ export async function declineDealer(input: { auctionId: string }) {
   requireUserId(userId);
 
   const parsed = auctionIdSchema.parse(input);
-  return declineDealerInDb(userId, parsed.auctionId);
+  try {
+    return await declineDealerInDb(userId, parsed.auctionId);
+  } catch (error) {
+    throw new Error(mapDealerActionError(error instanceof Error ? error.message : ""));
+  }
 }
 
 const placeBidSchema = z.object({
@@ -55,7 +93,11 @@ export async function placeBid(input: { auctionId: string; amount: number }) {
   requireUserId(userId);
 
   const parsed = placeBidSchema.parse(input);
-  return placeBidInDb(userId, parsed.auctionId, parsed.amount);
+  try {
+    return await placeBidInDb(userId, parsed.auctionId, parsed.amount);
+  } catch (error) {
+    throw new Error(mapPlaceBidError(error instanceof Error ? error.message : ""));
+  }
 }
 
 const groupIdSchema = z.object({ groupId: z.string().uuid() });
@@ -67,6 +109,15 @@ export async function getAuctionList(input: { groupId: string }) {
 
   const parsed = groupIdSchema.parse(input);
   return getAuctionListInDb(userId, parsed.groupId);
+}
+
+/** ⑩オークション会場。auction_public_view経由で1件取得。 */
+export async function getAuction(input: { auctionId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = auctionIdSchema.parse(input);
+  return getAuctionInDb(userId, parsed.auctionId);
 }
 
 /**
@@ -88,4 +139,33 @@ export async function getAnonymousBidFeed(input: { auctionId: string }) {
 
   const parsed = auctionIdSchema.parse(input);
   return getAnonymousBidFeedInDb(userId, parsed.auctionId);
+}
+
+/** 秘密リスト（⑬）「ディーラー」タブ。auction_public_view経由でdealer_id=自分の案件。 */
+export async function getMyDealerAuctions(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return getMyDealerAuctionsInDb(userId, parsed.groupId);
+}
+
+/** ⑨オークション一覧で「あなたが最高入札者です」を表示するために使う。 */
+export async function getMyWinningAuctionIds(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return getMyWinningAuctionIdsInDb(userId, parsed.groupId);
+}
+
+const secretGroupItemIdSchema = z.object({ secretGroupItemId: z.string().uuid() });
+
+/** 関連秘密詳細（⑯）ディーラー視点。secret_group_item_idからauction_public_viewを引く。 */
+export async function getAuctionBySecretGroupItem(input: { secretGroupItemId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = secretGroupItemIdSchema.parse(input);
+  return getAuctionBySecretGroupItemInDb(userId, parsed.secretGroupItemId);
 }

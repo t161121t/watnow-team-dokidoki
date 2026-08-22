@@ -7,26 +7,29 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonLink } from "@/components/ui/neon-button";
 import { SecretCard } from "@/features/secrets/components/secret-card";
+import type { SecretListItem } from "@/features/secrets/types";
 import { getGroupNavigation } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
-import type { Group } from "@/lib/types/group";
-import type { Secret } from "@/lib/types/secret";
 
 type Tab = "mine" | "dealer" | "collection";
 
 export function SecretListScreen({
-  group,
-  secrets,
+  groupId,
+  mine,
+  dealer,
+  collection,
 }: {
-  group: Group;
-  secrets: Secret[];
+  groupId: string;
+  mine: SecretListItem[];
+  dealer: SecretListItem[];
+  collection: SecretListItem[];
 }) {
   const [tab, setTab] = useState<Tab>("mine");
   const visibleSecrets = useMemo(() => {
-    if (tab === "dealer") return secrets.filter((secret) => secret.viewRole === "dealer");
-    if (tab === "collection") return secrets.filter((secret) => secret.viewRole === "winner");
-    return secrets.filter((secret) => secret.viewRole === "owner");
-  }, [secrets, tab]);
+    if (tab === "dealer") return dealer;
+    if (tab === "collection") return collection;
+    return mine;
+  }, [mine, dealer, collection, tab]);
 
   return (
     <MobileShell withNavigation>
@@ -34,7 +37,7 @@ export function SecretListScreen({
         title="秘密リスト"
         action={
           <NeonLink
-            href={`/groups/${group.id}/secrets/new`}
+            href={`/groups/${groupId}/secrets/new`}
             variant="secondary"
             size="sm"
           >
@@ -78,7 +81,7 @@ export function SecretListScreen({
           <p className="font-bold">秘密はありません</p>
         </div>
       )}
-      <BottomNavigation items={getGroupNavigation(group.id)} active="secrets" />
+      <BottomNavigation items={getGroupNavigation(groupId)} active="secrets" />
     </MobileShell>
   );
 }

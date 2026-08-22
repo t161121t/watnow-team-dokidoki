@@ -7,6 +7,9 @@ import { updateSecretBeforeListing as updateSecretBeforeListingInDb } from "@/fe
 import { deleteSecretBeforeListing as deleteSecretBeforeListingInDb } from "@/features/secrets/server/delete-secret-before-listing";
 import { listSecretForAuction as listSecretForAuctionInDb } from "@/features/secrets/server/list-secret-for-auction";
 import { getMySecretCollection as getMySecretCollectionInDb } from "@/features/secrets/server/get-my-secret-collection";
+import { listMySecrets as listMySecretsInDb } from "@/features/secrets/server/list-my-secrets";
+import { getMySecretItem as getMySecretItemInDb } from "@/features/secrets/server/get-my-secret-item";
+import { listMyWinnings as listMyWinningsInDb } from "@/features/secrets/server/list-my-winnings";
 
 function requireUserId(userId: string | null): asserts userId is string {
   if (!userId) {
@@ -113,4 +116,33 @@ export async function getMySecretCollection(input: { groupId?: string } = {}) {
 
   const parsed = getMySecretCollectionSchema.parse(input);
   return getMySecretCollectionInDb(userId, parsed.groupId);
+}
+
+const listMySecretsSchema = z.object({ groupId: z.string().uuid() });
+
+/** 秘密リスト（⑬）「自分の秘密」タブ。 */
+export async function listMySecrets(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = listMySecretsSchema.parse(input);
+  return listMySecretsInDb(userId, parsed.groupId);
+}
+
+/** 関連秘密詳細（⑯）owner視点。自分の秘密でなければnull。 */
+export async function getMySecretItem(input: { secretGroupItemId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = secretGroupItemIdSchema.parse(input);
+  return getMySecretItemInDb(userId, parsed.secretGroupItemId);
+}
+
+/** 秘密リスト（⑬）「落札済み」タブ。final_priceを補ったmy_secret_collection_view。 */
+export async function listMyWinnings(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = listMySecretsSchema.parse(input);
+  return listMyWinningsInDb(userId, parsed.groupId);
 }
