@@ -20,7 +20,7 @@ export function getGroupNavigation(groupId: string): NavigationItem[] {
     {
       key: "secrets",
       label: "秘密リスト",
-      href: `/groups/${groupId}/secrets`,
+      href: `/groups/${groupId}/secrets?tab=mine`,
       icon: Heart,
     },
     {
