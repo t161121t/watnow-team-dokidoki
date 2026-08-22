@@ -7,10 +7,10 @@ import {
   createAvatarUploadUrl,
 } from "@/lib/supabase/storage";
 import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
-import { searchUsers as searchUsersInDb } from "@/features/groups/server/search-users";
-import { inviteMember as inviteMemberInDb } from "@/features/groups/server/invite-member";
-import { acceptInvite as acceptInviteInDb } from "@/features/groups/server/accept-invite";
-import { declineInvite as declineInviteInDb } from "@/features/groups/server/decline-invite";
+import { createInviteLink as createInviteLinkInDb } from "@/features/groups/server/create-invite-link";
+import { revokeInviteLink as revokeInviteLinkInDb } from "@/features/groups/server/revoke-invite-link";
+import { joinViaInviteLink as joinViaInviteLinkInDb } from "@/features/groups/server/join-via-invite-link";
+import { getInviteLink as getInviteLinkInDb } from "@/features/groups/server/get-invite-link";
 import { leaveGroup as leaveGroupInDb } from "@/features/groups/server/leave-group";
 import { updateGroupMemberRole as updateGroupMemberRoleInDb } from "@/features/groups/server/update-group-member-role";
 import { kickGroupMember as kickGroupMemberInDb } from "@/features/groups/server/kick-group-member";
@@ -59,55 +59,51 @@ export async function createGroup(input: { name: string; iconPath?: string }) {
   return createGroupInDb(userId, parsed.name, parsed.iconPath ?? null);
 }
 
-const searchUsersSchema = z.object({
-  groupId: z.string().uuid(),
-  query: z.string().trim().min(2),
-});
-
-/**
- * グループ管理（⑤）でのメンバー招待用ニックネーム検索。呼び出しユーザーが
- * 対象グループのadminであることはsearch_users RPC側が検証する。
- */
-export async function searchUsers(input: { groupId: string; query: string }) {
-  const userId = await getCurrentUserId();
-  requireUserId(userId);
-
-  const parsed = searchUsersSchema.parse(input);
-  return searchUsersInDb(userId, parsed.groupId, parsed.query);
-}
-
-const inviteMemberSchema = z.object({
-  groupId: z.string().uuid(),
-  userId: z.string().uuid(),
-});
-
-/** グループ管理（⑤）でのメンバー招待。admin確認はinvite_member RPC側が行う。 */
-export async function inviteMember(input: { groupId: string; userId: string }) {
-  const currentUserId = await getCurrentUserId();
-  requireUserId(currentUserId);
-
-  const parsed = inviteMemberSchema.parse(input);
-  return inviteMemberInDb(currentUserId, parsed.groupId, parsed.userId);
-}
-
 const groupIdSchema = z.object({ groupId: z.string().uuid() });
 
-/** 招待の確認（③）での承諾。 */
-export async function acceptInvite(input: { groupId: string }) {
+/**
+ * グループ管理（⑤）での招待URL発行/再発行（issue #71）。既存リンクがある場合は
+ * コードを再発行し、旧リンクは自動的に無効化される（create_group_invite_link
+ * RPCのupsert）。admin確認はRPC側が行う。
+ */
+export async function createGroupInviteLink(input: { groupId: string }) {
   const userId = await getCurrentUserId();
   requireUserId(userId);
 
   const parsed = groupIdSchema.parse(input);
-  return acceptInviteInDb(userId, parsed.groupId);
+  return createInviteLinkInDb(userId, parsed.groupId);
 }
 
-/** 招待の確認（③）での辞退。 */
-export async function declineInvite(input: { groupId: string }) {
+/** グループ管理（⑤）での招待URL取り消し。admin確認はRPC側が行う。 */
+export async function revokeGroupInviteLink(input: { groupId: string }) {
   const userId = await getCurrentUserId();
   requireUserId(userId);
 
   const parsed = groupIdSchema.parse(input);
-  return declineInviteInDb(userId, parsed.groupId);
+  return revokeInviteLinkInDb(userId, parsed.groupId);
+}
+
+/** グループ管理（⑤）で現在有効な招待URLのコードを取得する。 */
+export async function getInviteLink(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return getInviteLinkInDb(userId, parsed.groupId);
+}
+
+const joinViaInviteLinkSchema = z.object({ code: z.string().min(1) });
+
+/**
+ * 招待URLでのグループ参加（issue #71）。新規参加・再参加のいずれもRPC
+ * （join_group_via_invite_link）側で処理する。
+ */
+export async function joinGroupViaInviteLink(input: { code: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = joinViaInviteLinkSchema.parse(input);
+  return joinViaInviteLinkInDb(userId, parsed.code);
 }
 
 /**
@@ -149,6 +145,11 @@ export async function updateGroupMemberRole(input: {
   );
 }
 
+const groupMemberIdSchema = z.object({
+  groupId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
 /**
  * グループ管理（⑤）でのメンバーkick。進行中オークションに関与中の場合や
  * 最後のadminの場合はkick_group_member RPC側が拒否する。
@@ -157,6 +158,6 @@ export async function kickGroupMember(input: { groupId: string; userId: string }
   const currentUserId = await getCurrentUserId();
   requireUserId(currentUserId);
 
-  const parsed = inviteMemberSchema.parse(input);
+  const parsed = groupMemberIdSchema.parse(input);
   return kickGroupMemberInDb(currentUserId, parsed.groupId, parsed.userId);
 }
