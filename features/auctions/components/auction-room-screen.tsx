@@ -11,10 +11,24 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
 import { getAnonymousBidFeed, getAuction, placeBid } from "@/features/auctions/actions";
+import type { PlaceBidErrorStatus } from "@/features/auctions/actions";
 import { useAuctionRealtime } from "@/features/auctions/components/use-auction-realtime";
 import { formatRemainingLabel } from "@/features/auctions/format";
 import type { AuctionStatus } from "@/features/auctions/types";
 import { getGroupNavigation } from "@/lib/navigation";
+
+const PLACE_BID_ERROR_MESSAGES: Record<PlaceBidErrorStatus, string> = {
+  not_authenticated: "ログインが必要です",
+  invalid_input: "入力内容が正しくありません",
+  insufficient_balance: "残高が不足しています",
+  seller_cannot_bid: "自分の出品には入札できません",
+  dealer_cannot_bid: "担当ディーラーは入札できません",
+  amount_too_low: "現在価格を超える金額を入力してください",
+  not_open: "現在は入札を受け付けていません",
+  outside_bidding_window: "入札受付時間外です",
+  not_a_member: "このグループのメンバーではありません",
+  unknown_error: "入札に失敗しました",
+};
 
 export type RoomAuction = {
   id: string;
@@ -120,11 +134,20 @@ export function AuctionRoomScreen({
     setMessage("");
     setIsSubmitting(true);
     try {
-      await placeBid({ auctionId: auction.id, amount });
-      setMessage(`${amount.toLocaleString()}ptで入札しました`);
-      router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "入札に失敗しました");
+      // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+      // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+      // 2026-08-23、ユーザー報告で発覚）。placeBidは例外を投げず、戻り値の
+      // statusで成功/失敗理由を表現する（セッション切れ・入力不正も含む）。
+      const result = await placeBid({ auctionId: auction.id, amount });
+      if (result.status === "ok") {
+        setMessage(`${amount.toLocaleString()}ptで入札しました`);
+        router.refresh();
+      } else {
+        setMessage(PLACE_BID_ERROR_MESSAGES[result.status]);
+      }
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setMessage("通信エラーが発生しました。もう一度お試しください");
     } finally {
       setIsSubmitting(false);
     }

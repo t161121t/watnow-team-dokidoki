@@ -19,28 +19,66 @@ function requireUserId(userId: string | null): asserts userId is string {
 
 /**
  * PostgreSQL FunctionのRAISE EXCEPTIONはPrismaの生SQLエラーとして技術的な
- * メッセージ（P0001等）で返ってくるため、UI表示用に丸める
- * （features/groups/actions.tsのjoinGroupViaInviteLinkと同じパターン）。
+ * メッセージ（P0001等）で返ってくるため、UI表示用の分類コードに丸める。
  * 元のRAISE EXCEPTIONメッセージ一覧はprisma/sql/auctions/*.sql参照。
+ *
+ * throwではなく戻り値のstatusで表現する（features/groups/actions.tsの
+ * joinGroupViaInviteLinkと同じパターン）。throw/error.messageの文字列比較には
+ * 依存しない設計にしたのは、本番ビルドではServer Actionのエラーメッセージが
+ * サニタイズされ、mapPlaceBidError等で組み立てた日本語メッセージ自体が
+ * クライアントに届かなくなるため（2026-08-23、ユーザー報告で発覚。
+ * join-via-link-screen.tsxのコメント参照）。日本語文言はクライアント側の
+ * 呼び出し元コンポーネントで持つ。
+ *
+ * placeBid/approveDealerAssignment/declineDealerは、セッション切れ・入力
+ * 不正もPromise rejectさせずstatusで返す（PR #102レビュー指摘）。この3つに
+ * 新しいチェックを追加する際はrequireUserId()やzod .parse()（throw系）では
+ * なく、if文 + safeParse()でstatusを返すこと。
  */
-function mapPlaceBidError(message: string): string {
-  if (message.includes("insufficient balance")) return "残高が不足しています";
-  if (message.includes("seller cannot bid")) return "自分の出品には入札できません";
-  if (message.includes("dealer cannot bid")) return "担当ディーラーは入札できません";
-  if (message.includes("amount must exceed")) return "現在価格を超える金額を入力してください";
-  if (message.includes("auction is not open")) return "現在は入札を受け付けていません";
-  if (message.includes("bidding window")) return "入札受付時間外です";
-  if (message.includes("not a member")) return "このグループのメンバーではありません";
-  return "入札に失敗しました";
+export type PlaceBidErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
+  | "insufficient_balance"
+  | "seller_cannot_bid"
+  | "dealer_cannot_bid"
+  | "amount_too_low"
+  | "not_open"
+  | "outside_bidding_window"
+  | "not_a_member"
+  | "unknown_error";
+
+export type PlaceBidResult = { status: "ok" } | { status: PlaceBidErrorStatus };
+
+function mapPlaceBidErrorStatus(message: string): PlaceBidErrorStatus {
+  if (message.includes("insufficient balance")) return "insufficient_balance";
+  if (message.includes("seller cannot bid")) return "seller_cannot_bid";
+  if (message.includes("dealer cannot bid")) return "dealer_cannot_bid";
+  if (message.includes("amount must exceed")) return "amount_too_low";
+  if (message.includes("auction is not open")) return "not_open";
+  if (message.includes("bidding window")) return "outside_bidding_window";
+  if (message.includes("not a member")) return "not_a_member";
+  return "unknown_error";
 }
 
-function mapDealerActionError(message: string): string {
-  if (message.includes("not authorized")) return "この操作を行う権限がありません";
-  if (message.includes("no other eligible dealer")) return "他に割り当て可能なディーラーがいません";
+export type DealerActionErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
+  | "not_authorized"
+  | "not_active_member"
+  | "no_other_eligible_dealer"
+  | "already_processed"
+  | "unknown_error";
+
+export type DealerActionResult = { status: "ok" } | { status: DealerActionErrorStatus };
+
+function mapDealerActionErrorStatus(message: string): DealerActionErrorStatus {
+  if (message.includes("not authorized")) return "not_authorized";
+  if (message.includes("not an active member")) return "not_active_member";
+  if (message.includes("no other eligible dealer")) return "no_other_eligible_dealer";
   if (message.includes("already open") || message.includes("not pending approval")) {
-    return "この案件は既に処理済みです";
+    return "already_processed";
   }
-  return "操作に失敗しました";
+  return "unknown_error";
 }
 
 const auctionIdSchema = z.object({ auctionId: z.string().uuid() });
@@ -49,15 +87,20 @@ const auctionIdSchema = z.object({ auctionId: z.string().uuid() });
  * ディーラー承認。承認でopenになり、入札受付が始まる（starts_at/ends_atも
  * このRPCの中で確定する）。approve_dealer_assignment RPC経由。
  */
-export async function approveDealerAssignment(input: { auctionId: string }) {
+export async function approveDealerAssignment(input: {
+  auctionId: string;
+}): Promise<DealerActionResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = auctionIdSchema.parse(input);
+  const parsed = auctionIdSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    return await approveDealerAssignmentInDb(userId, parsed.auctionId);
+    await approveDealerAssignmentInDb(userId, parsed.data.auctionId);
+    return { status: "ok" };
   } catch (error) {
-    throw new Error(mapDealerActionError(error instanceof Error ? error.message : ""));
+    return { status: mapDealerActionErrorStatus(error instanceof Error ? error.message : "") };
   }
 }
 
@@ -65,15 +108,18 @@ export async function approveDealerAssignment(input: { auctionId: string }) {
  * ディーラー辞退。辞退料（P12=5%、完全没収）が発生し、別のディーラーへ
  * 再割当される。decline_dealer RPC経由。
  */
-export async function declineDealer(input: { auctionId: string }) {
+export async function declineDealer(input: { auctionId: string }): Promise<DealerActionResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = auctionIdSchema.parse(input);
+  const parsed = auctionIdSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    return await declineDealerInDb(userId, parsed.auctionId);
+    await declineDealerInDb(userId, parsed.data.auctionId);
+    return { status: "ok" };
   } catch (error) {
-    throw new Error(mapDealerActionError(error instanceof Error ? error.message : ""));
+    return { status: mapDealerActionErrorStatus(error instanceof Error ? error.message : "") };
   }
 }
 
@@ -86,15 +132,21 @@ const placeBidSchema = z.object({
  * 入札。現在価格超え・残高十分・自出品/ディーラー本人でないこと等は
  * place_bid RPC側が検証する（RLS + Function内チェックの二重防御）。
  */
-export async function placeBid(input: { auctionId: string; amount: number }) {
+export async function placeBid(input: {
+  auctionId: string;
+  amount: number;
+}): Promise<PlaceBidResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = placeBidSchema.parse(input);
+  const parsed = placeBidSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    return await placeBidInDb(userId, parsed.auctionId, parsed.amount);
+    await placeBidInDb(userId, parsed.data.auctionId, parsed.data.amount);
+    return { status: "ok" };
   } catch (error) {
-    throw new Error(mapPlaceBidError(error instanceof Error ? error.message : ""));
+    return { status: mapPlaceBidErrorStatus(error instanceof Error ? error.message : "") };
   }
 }
 
