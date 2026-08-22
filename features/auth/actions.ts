@@ -37,11 +37,10 @@ const passwordSignUpSchema = passwordSignInSchema.extend({
  * 作成はSupabase Auth側に任せる。public.usersの作成はここでは行わない
  * （オンボーディング完了時のcompleteProfileで行う）。
  *
- * signInWithOAuthはリダイレクト先URLを返すだけで自分ではリダイレクトしない
- * （ブラウザの遷移が必要なため）。Server Action内でnext/navigationのredirect()
- * を呼び、呼び出し元（フォームのaction等）はこの関数を直接呼べば良い。
+ * signInWithOAuthが返すOAuth認証URLを呼び出し元へ返す。ブラウザの遷移はClient側
+ * で行う。
  */
-export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
+export async function signInWithGoogle(input: { redirectTo?: string } = {}): Promise<string> {
   const parsed = redirectToSchema.parse(input);
   const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
   const supabase = await createSupabaseServerClient();
@@ -55,7 +54,7 @@ export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
     throw new Error("Googleログインの開始に失敗しました");
   }
 
-  redirect(data.url);
+  return data.url;
 }
 
 /**

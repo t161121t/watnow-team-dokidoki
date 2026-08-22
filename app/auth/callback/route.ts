@@ -16,7 +16,7 @@ import { getMyGroups } from "@/features/groups/actions";
  * actions.tsを呼ぶ形にした（features/README.mdの依存方向に合わせるため。
  * features/auth/actions.tsからfeatures/groups/*を直接importしない）。
  *
- * 失敗時は`?auth_error=1`付きで"/"へ戻る（エラー表示自体は未実装）。
+ * 失敗時はGoogleログイン失敗コード付きでログイン画面へ戻る。
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const explicitRedirectTo = searchParams.get("redirect_to");
 
   if (!code || !(await exchangeCodeForSession(code))) {
-    return NextResponse.redirect(`${origin}/?auth_error=1`);
+    return NextResponse.redirect(`${origin}/login?auth_error=google_login_failed`);
   }
 
   if (explicitRedirectTo) {
