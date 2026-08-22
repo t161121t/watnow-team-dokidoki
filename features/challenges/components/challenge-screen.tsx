@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -7,6 +8,8 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
+import type { ChallengeListTab } from "@/features/challenges/challenge-list-tab";
+import { ChallengeApprovalPanel } from "@/features/challenges/components/challenge-approval-panel";
 import { ChallengeCard } from "@/features/challenges/components/challenge-card";
 import type { ChallengeListItem } from "@/features/challenges/components/challenge-card";
 import { CooldownRefresher } from "@/features/challenges/components/cooldown-refresher";
@@ -15,6 +18,7 @@ import { getGroupChallengeAttempts } from "@/features/challenges/server/get-grou
 import { getGroupChallenges } from "@/features/challenges/server/get-group-challenges";
 import { getGroupNavigation } from "@/lib/navigation";
 import { getCurrentUserId } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 
 const HISTORY_STATUS_LABELS: Record<string, string> = {
   pending: "承認待ち",
@@ -28,15 +32,21 @@ const HISTORY_STATUS_LABELS: Record<string, string> = {
  * 直接呼ぶ（docs/アーキテクチャ.md §1.1a）。balanceSectionはwalletドメイン
  * （cross-domain）のため、呼び出し元のapp/groups/[groupId]/challenges/
  * page.tsxで組み立ててReactNodeとして渡す。
+ * タブ切り替えはURLのクエリ（?tab=...）駆動（secretsのsecret-list-screen.tsx
+ * と同じパターン）。承認待ち（review）はapprove_challenge RPCが
+ * is_group_memberのみを要求するためグループの誰にでもタブを表示する
+ * （challenge-approval-panel.tsx参照）。
  */
 export async function ChallengeScreen({
   groupId,
   balanceSection,
   isAdmin,
+  tab,
 }: {
   groupId: string;
   balanceSection: ReactNode;
   isAdmin: boolean;
+  tab: ChallengeListTab;
 }) {
   if (!z.string().uuid().safeParse(groupId).success) {
     notFound();
@@ -44,7 +54,61 @@ export async function ChallengeScreen({
 
   const userId = await getCurrentUserId();
   if (!userId) {
-    redirect(`/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/challenges`)}`);
+    const returnPath =
+      tab === "review"
+        ? `/groups/${groupId}/challenges?tab=review`
+        : `/groups/${groupId}/challenges`;
+    redirect(`/login?redirect_to=${encodeURIComponent(returnPath)}`);
+  }
+
+  const tabNav = (
+    <div className="mb-6 grid grid-cols-2 rounded-full border border-[#c038ff]/55 bg-black/65 p-1 shadow-[0_0_13px_rgba(192,56,255,0.28)]">
+      {(
+        [
+          ["list", "チャレンジ"],
+          ["review", "承認待ち"],
+        ] as const
+      ).map(([value, label]) => (
+        <Link
+          key={value}
+          href={{
+            pathname: `/groups/${groupId}/challenges`,
+            query: { tab: value },
+          }}
+          replace
+          scroll={false}
+          aria-current={tab === value ? "page" : undefined}
+          className={cn(
+            "flex min-h-9 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white/45 transition",
+            tab === value &&
+              "bg-[#c038ff]/22 text-white shadow-[0_0_12px_rgba(192,56,255,0.58)]",
+          )}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
+  );
+
+  // 承認待ちタブ表示中はチャレンジ一覧側のデータを使わないため取得しない
+  if (tab === "review") {
+    return (
+      <MobileShell withNavigation>
+        <ScreenHeader
+          title="チャレンジ"
+          action={
+            isAdmin ? (
+              <NeonLink href={`/groups/${groupId}/challenges/new`} variant="secondary" size="sm">
+                作成
+              </NeonLink>
+            ) : null
+          }
+        />
+        {tabNav}
+        <ChallengeApprovalPanel groupId={groupId} userId={userId} />
+        <BottomNavigation items={getGroupNavigation(groupId)} active="challenges" />
+      </MobileShell>
+    );
   }
 
   const [challenges, myAttempts] = await Promise.all([
@@ -90,18 +154,14 @@ export async function ChallengeScreen({
       <ScreenHeader
         title="チャレンジ"
         action={
-          <div className="flex shrink-0 gap-2">
-            {isAdmin ? (
-              <NeonLink href={`/groups/${groupId}/challenges/new`} variant="secondary" size="sm">
-                作成
-              </NeonLink>
-            ) : null}
-            <NeonLink href={`/groups/${groupId}/challenges/review`} variant="secondary" size="sm">
-              承認待ち
+          isAdmin ? (
+            <NeonLink href={`/groups/${groupId}/challenges/new`} variant="secondary" size="sm">
+              作成
             </NeonLink>
-          </div>
+          ) : null
         }
       />
+      {tabNav}
       <NeonCard className="mb-7 p-5">
         <p className="text-xs font-bold text-white/45">現在のポイント</p>
         {balanceSection}

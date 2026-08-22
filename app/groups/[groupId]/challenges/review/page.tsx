@@ -1,9 +1,14 @@
-import { ChallengeApprovalScreen } from "@/features/challenges/components/challenge-approval-screen";
+import { redirect } from "next/navigation";
 
+/**
+ * 旧・チャレンジ承認画面。承認待ちキューはチャレンジ一覧のタブ
+ * （/groups/[groupId]/challenges?tab=review）へ統合されたため、
+ * 既存リンク・ブックマーク切れ防止のリダイレクトのみを残す。
+ */
 export default async function ChallengeApprovalPage({
   params,
 }: PageProps<"/groups/[groupId]/challenges/review">) {
   const { groupId } = await params;
 
-  return <ChallengeApprovalScreen groupId={groupId} />;
+  redirect(`/groups/${groupId}/challenges?tab=review`);
 }
