@@ -4,6 +4,7 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { MockActionButton } from "@/components/ui/mock-action-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
+import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Bid } from "@/lib/types/auction";
 import type { Secret } from "@/lib/types/secret";
@@ -11,17 +12,20 @@ import type { Secret } from "@/lib/types/secret";
 export function SecretDetailScreen({
   secret,
   bids,
+  returnTab,
 }: {
   secret: Secret;
   bids: Bid[];
+  returnTab: SecretListTab;
 }) {
   const isDealer = secret.viewRole === "dealer";
+  const backHref = `/groups/${secret.groupId}/secrets?tab=${returnTab}`;
 
   return (
     <MobileShell withNavigation>
       <ScreenHeader
         title={isDealer ? "ディーラー出品" : "あなたの出品"}
-        backHref={`/groups/${secret.groupId}/secrets`}
+        backHref={backHref}
       />
 
       <NeonCard className="p-5">
