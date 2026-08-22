@@ -323,7 +323,7 @@ P1〜P12のうち「グループごとに変わりうる値」は実質 P2（`au
 | 定数 | 値 | 元のパラメータ | 参照する場所 |
 | --- | --- | --- | --- |
 | 開始価格の加算・倍率 | 加算`0`・倍率`1`（出品価格と同額） | P3 | `list_secret_for_auction`（§6.2） |
-| 前払い率 | `1.0`（100%） | P4 | `list_secret_for_auction`（§6.2） |
+| 前払い率 | `1.0`（100%） | P4 | `approve_dealer_assignment`（§6.3。2026-08-23〜。承認前に辞退が続き最終的に誰も承認できないケースで出品者に前払いだけ残ってしまうのを防ぐため、出品時ではなくディーラー承認時にcreditする） |
 | 落札時追加振込率 | `0`（なし） | P5 | `finalize_auction`（§6.3） |
 | 不落札時の目減り率 | `0.20`（20%） | P6 | `finalize_auction` / `no_sale`（§10.3） |
 | 按分比（出品者:ディーラー） | `0.70 : 0.30` | P7 | `finalize_auction`（§6.3） |
@@ -843,7 +843,7 @@ RLS / view 条件:
 | `update_secret_before_listing(secret_id, ...)`                             | 出品前のみ編集                                            |
 | `delete_secret_before_listing(secret_id)`                                  | 出品前のみ soft delete                                  |
 | `publish_secret_to_group(secret_id, group_id, asking_price)`               | Phase 2 の複数 group 公開用                              |
-| `list_secret_for_auction(secret_group_item_id)`                            | listed 化、`auctions` 行作成（`status = pending_dealer_approval`、`starts_at`/`ends_at` は null）、dealer ランダム選抜、前払い credit（P4） |
+| `list_secret_for_auction(secret_group_item_id)`                            | listed 化、`auctions` 行作成（`status = pending_dealer_approval`、`starts_at`/`ends_at` は null。`listing_prepay_amount` はここで確定するが、前払い自体のcreditはディーラー承認時=`approve_dealer_assignment`まで行わない）、dealer ランダム選抜 |
 
 
 
@@ -853,7 +853,7 @@ RLS / view 条件:
 
 | RPC                                        | 責務                                                                                                           |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `approve_dealer_assignment(auction_id)`     | 割り当てられた dealer 本人のみ実行可。`pending_dealer_approval` → `open`。`starts_at = now()`、`ends_at = now() + groups.auction_open_seconds` を確定（P1・P2） |
+| `approve_dealer_assignment(auction_id)`     | 割り当てられた dealer 本人のみ実行可。`pending_dealer_approval` → `open`。`starts_at = now()`、`ends_at = now() + groups.auction_open_seconds` を確定（P1・P2）。出品者への前払い（`listing_prepay_amount`、P4）をここで初めて `_credit_wallet`（`kind = 'listing_prepay'`）でcredit（2026-08-23〜。以前は`list_secret_for_auction`で行っていたが、承認前に辞退が続くと出品者にだけ前払いが残ってしまうためここに移した） |
 | `place_bid(auction_id, amount)`             | 所属・状態（`open`）・残高・価格・自出品不可・dealer 不可を検証し bid 作成、current_price 更新                                                    |
 | `claim_auction_for_finalize(auction_id)`    | `open` かつ `ends_at <= now()` の auction を `finalizing` にクレーム（Stage A。§10.2 参照）                                |
 | `finalize_auction(auction_id)`              | `finalizing` の auction を確定。入札額降順に残高十分な候補を探索し勝者決定（次点繰り上げ、§10.2.1）。勝者 debit、按分 credit（P7）、`auctions.winner_id` 確定（= 閲覧権付与。旧 secret_accesses insert は不要）、status 更新（Stage B） |

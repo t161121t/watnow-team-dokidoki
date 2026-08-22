@@ -3,6 +3,12 @@
 -- あることを確認する（割り当て後に脱退/kickされたユーザーが承認/辞退できてしまうため）。
 -- 辞退料の基準は secret_group_items.asking_price（再出品後は古い値になりうる）ではなく、
 -- このオークション自体の listing_prepay_amount（listing時に確定した実際の価格基準）を使う。
+--
+-- 2026-08-23 ユーザー報告反映: 出品時の前払い（P4）creditは、以前は
+-- list_secret_for_auction（出品/list時点）で行っていたが、ここ（ディーラー承認時）に
+-- 移した。承認前に出品者へポイントが動いてしまうと、ディーラーが辞退を繰り返して
+-- 最終的に承認可能なディーラーがいなくなった場合でも、出品者は前払いを受け取った
+-- ままになってしまうため（prisma/sql/secrets/003_list_secret_for_auction.sql参照）。
 
 CREATE OR REPLACE FUNCTION approve_dealer_assignment(p_auction_id uuid)
 RETURNS auctions
@@ -43,6 +49,12 @@ BEGIN
 
   UPDATE secret_group_items SET status = 'on_auction', updated_at = now()
   WHERE id = v_auction.secret_group_item_id;
+
+  -- P4: 前払い = 出品価格と同額（100%）。承認が確定した時点で初めて出品者へ渡す。
+  PERFORM _credit_wallet(
+    v_auction.group_id, v_auction.seller_id, v_auction.listing_prepay_amount,
+    'listing_prepay', 'secret_group_items', v_auction.secret_group_item_id
+  );
 
   RETURN v_auction;
 END;
