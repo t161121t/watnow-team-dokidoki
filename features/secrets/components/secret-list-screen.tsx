@@ -41,12 +41,11 @@ export function SecretListScreen({
         }
       />
 
-      <div className="mb-6 grid grid-cols-3 rounded-full border border-[#c038ff]/55 bg-black/65 p-1 shadow-[0_0_13px_rgba(192,56,255,0.28)]">
+      <div className="mb-6 grid grid-cols-2 rounded-full border border-[#c038ff]/55 bg-black/65 p-1 shadow-[0_0_13px_rgba(192,56,255,0.28)]">
         {(
           [
             ["mine", "自分の秘密"],
             ["dealer", "ディーラー"],
-            ["collection", "落札済み"],
           ] as const
         ).map(([value, label]) => (
           <Link
@@ -80,7 +79,10 @@ export function SecretListScreen({
           <p className="font-bold">秘密はありません</p>
         </div>
       )}
-      <BottomNavigation items={getGroupNavigation(group.id)} active="secrets" />
+      <BottomNavigation
+        items={getGroupNavigation(group.id)}
+        active={tab === "collection" ? "me" : "secrets"}
+      />
     </MobileShell>
   );
 }

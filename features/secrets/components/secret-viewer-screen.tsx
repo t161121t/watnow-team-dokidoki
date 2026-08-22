@@ -65,7 +65,10 @@ export function SecretViewerScreen({
         </div>
       </NeonCard>
 
-      <BottomNavigation items={getGroupNavigation(secret.groupId)} active="secrets" />
+      <BottomNavigation
+        items={getGroupNavigation(secret.groupId)}
+        active={returnTab === "collection" ? "me" : "secrets"}
+      />
     </MobileShell>
   );
 }
