@@ -7,6 +7,7 @@ import {
   createAvatarUploadUrl,
 } from "@/lib/supabase/storage";
 import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
+import { getMyGroups as getMyGroupsInDb } from "@/features/groups/server/get-my-groups";
 import { searchUsers as searchUsersInDb } from "@/features/groups/server/search-users";
 import { inviteMember as inviteMemberInDb } from "@/features/groups/server/invite-member";
 import { acceptInvite as acceptInviteInDb } from "@/features/groups/server/accept-invite";
@@ -57,6 +58,18 @@ export async function createGroup(input: { name: string; iconPath?: string }) {
 
   const parsed = createGroupSchema.parse(input);
   return createGroupInDb(userId, parsed.name, parsed.iconPath ?? null);
+}
+
+/**
+ * 本人が所属するactiveなgroupの一覧。ログイン直後の遷移先判定
+ * （app/auth/callback/route.ts。所属ありならホーム⑥、未所属なら
+ * 参加/作成へ、docs/画面.md §2）に使う。
+ */
+export async function getMyGroups() {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  return getMyGroupsInDb(userId);
 }
 
 const searchUsersSchema = z.object({
