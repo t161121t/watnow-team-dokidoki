@@ -56,7 +56,6 @@ export function SignupScreen() {
         email: values.email,
         password: values.password,
         nickname: values.nickname,
-        redirectTo: "/groups",
       });
       if (result.status === "confirmation_required") {
         setConfirmationSent(true);

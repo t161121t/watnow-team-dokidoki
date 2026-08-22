@@ -8,3 +8,12 @@
 export function isSafeRedirectPath(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\");
 }
+
+/**
+ * ログイン済みユーザーのデフォルト遷移先（docs/画面.md §2）。
+ * 所属ありならホーム⑥、未所属なら参加/作成。複数所属時は作成が古い順の先頭
+ * （getMyGroupsのorderByと同じ。最後に開いたグループの記憶は未実装）。
+ */
+export function postAuthDestination(groups: { id: string }[]): string {
+  return groups.length > 0 ? `/groups/${groups[0].id}` : "/groups/join";
+}
