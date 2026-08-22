@@ -2,13 +2,17 @@ import Link from "next/link";
 
 import { neonButtonVariants } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
-import type { Challenge } from "@/lib/types/challenge";
 import { cn } from "@/lib/utils";
 
-const borders: Record<Challenge["tone"], string> = {
-  pink: "border-[#c038ff]/75",
-  blue: "border-[#c038ff]/75",
-  violet: "border-[#914dff]/70",
+export type ChallengeCardState = "available" | "pending" | "cooldown";
+
+export type ChallengeListItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  reward: number;
+  state: ChallengeCardState;
+  cooldownLabel: string | null;
 };
 
 export function ChallengeCard({
@@ -16,27 +20,33 @@ export function ChallengeCard({
   challenge,
 }: {
   groupId: string;
-  challenge: Challenge;
+  challenge: ChallengeListItem;
 }) {
+  const stateLabel =
+    challenge.state === "pending"
+      ? "承認待ち"
+      : challenge.state === "cooldown"
+        ? challenge.cooldownLabel
+        : null;
+
   return (
     <Link
       href={`/groups/${groupId}/challenges/${challenge.id}`}
       className="group block focus-visible:outline-none"
     >
-      <NeonCard
-        className={cn(
-          "flex items-center justify-between gap-3 p-4 transition group-hover:-translate-y-0.5 group-hover:border-[#d75cff] group-focus-visible:ring-2 group-focus-visible:ring-[#c038ff]",
-          borders[challenge.tone],
-        )}
-      >
+      <NeonCard className="flex items-center justify-between gap-3 p-4 border-[#c038ff]/75 transition group-hover:-translate-y-0.5 group-hover:border-[#d75cff] group-focus-visible:ring-2 group-focus-visible:ring-[#c038ff]">
         <div className="min-w-0">
           <h3 className="font-bold">{challenge.title}</h3>
-          <p className="mt-1 text-xs text-white/55">{challenge.description}</p>
+          {challenge.description ? (
+            <p className="mt-1 text-xs text-white/55">{challenge.description}</p>
+          ) : null}
           <div className="mt-2 flex items-center gap-2">
             <p className="text-xs font-black text-[#e692ff]">
               クリアで{challenge.reward}pt
             </p>
-            <span className="text-[10px] text-white/38">{challenge.attemptsLabel}</span>
+            {stateLabel ? (
+              <span className="text-[10px] text-white/38">{stateLabel}</span>
+            ) : null}
           </div>
         </div>
         <span

@@ -257,6 +257,64 @@ async function main() {
     "getGroupChallengeAttempts: userId指定で本人の挑戦だけに絞り込める",
   );
 
+  // --- challenge-evidenceバケットのRLS（prisma/sql/challenges/003_evidence_storage.sql） ---
+  // Storage APIやファイルバイト自体は使わず、storage.objectsも通常のRLS付き
+  // テーブルとして扱えることを利用し、withRlsContext経由の生SQLで直接検証する
+  // （lib/db/rls.tsのwithRlsContextコメント参照。他のRLSテストと同じ手法）。
+  // storage.objectsは直接DELETEできず（Supabase側のトリガーで拒否される。
+  // 下のfinally参照）、クリーンアップにはservice roleキーでのStorage API
+  // 呼び出しが要るが、このプロジェクトの.envにはservice roleキーを置いていない
+  // （anon keyのみ）。再実行時に同名の重複行を積まないよう、pathをrandomUUID
+  // で毎回変える。
+  const evidencePath = `${submitter}/${crypto.randomUUID()}.png`;
+
+  await assertRejects(
+    () =>
+      withRlsContext(submitter, (tx) => tx.$executeRaw`
+        INSERT INTO storage.objects (bucket_id, name)
+        VALUES ('challenge-evidence', ${`${reviewer}/spoofed.png`})
+      `),
+    "challenge_evidence_owner_insert: 他人のフォルダへは書き込めない",
+  );
+
+  await withRlsContext(submitter, (tx) => tx.$executeRaw`
+    INSERT INTO storage.objects (bucket_id, name)
+    VALUES ('challenge-evidence', ${evidencePath})
+  `);
+
+  const selfRead = await withRlsContext(submitter, (tx) => tx.$queryRaw<{ name: string }[]>`
+    SELECT name FROM storage.objects WHERE bucket_id = 'challenge-evidence' AND name = ${evidencePath}
+  `);
+  assert(selfRead.length === 1, "challenge_evidence_select_self_or_group_member: 本人は自分の写真が見える");
+
+  const outsiderReadBeforeAttempt = await withRlsContext(outsider, (tx) => tx.$queryRaw<{ name: string }[]>`
+    SELECT name FROM storage.objects WHERE bucket_id = 'challenge-evidence' AND name = ${evidencePath}
+  `);
+  assert(
+    outsiderReadBeforeAttempt.length === 0,
+    "challenge_evidence_select_self_or_group_member: attempt行が無い間は本人以外に見えない",
+  );
+
+  const evidenceAttempt = await submitChallenge(submitter, groupId, challengeC.id, evidencePath);
+
+  const reviewerReadAfterAttempt = await withRlsContext(reviewer, (tx) => tx.$queryRaw<{ name: string }[]>`
+    SELECT name FROM storage.objects WHERE bucket_id = 'challenge-evidence' AND name = ${evidencePath}
+  `);
+  assert(
+    reviewerReadAfterAttempt.length === 1,
+    "challenge_evidence_select_self_or_group_member: attempt経由で同じgroupのメンバーは見える",
+  );
+
+  const outsiderReadAfterAttempt = await withRlsContext(outsider, (tx) => tx.$queryRaw<{ name: string }[]>`
+    SELECT name FROM storage.objects WHERE bucket_id = 'challenge-evidence' AND name = ${evidencePath}
+  `);
+  assert(
+    outsiderReadAfterAttempt.length === 0,
+    "challenge_evidence_select_self_or_group_member: attempt経由でもグループ外には見えない",
+  );
+
+  await approveChallenge(reviewer, evidenceAttempt.id, "rejected");
+
   console.log("\nALL CHECKS PASSED");
 }
 
@@ -266,6 +324,12 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
+    // storage.objectsの直接DELETEはSupabase側で拒否される
+    // （"Direct deletion from storage tables is not allowed. Use the Storage
+    // API instead."）。cleanupにはservice roleキーが要るが、このプロジェクトの
+    // .envには置いていないため、challenge-evidenceバケットのテスト行
+    // （${submitter}/配下）は意図的にクリーンアップせず残す
+    // （上のコメント・evidencePathのrandomUUID採番参照）。
     await prisma.challengeAttempt.deleteMany({ where: { userId: { in: users } } });
     await prisma.challenge.deleteMany({
       where: {
