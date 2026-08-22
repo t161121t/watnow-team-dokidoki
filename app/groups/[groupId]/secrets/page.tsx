@@ -1,3 +1,6 @@
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
+
 import { getMyDealerAuctions } from "@/features/auctions/actions";
 import { formatRemainingLabel } from "@/features/auctions/format";
 import { SecretListScreen } from "@/features/secrets/components/secret-list-screen";
@@ -10,10 +13,27 @@ export default async function SecretsPage({
 }: PageProps<"/groups/[groupId]/secrets">) {
   const [{ groupId }, { tab }] = await Promise.all([params, searchParams]);
 
+  if (!z.string().uuid().safeParse(groupId).success) {
+    notFound();
+  }
+
   // ディーラータブのデータ（auctionsドメイン）はfeatures/secrets/components/
   // secret-list-screen.tsxから直接読めない（ドメイン境界。同ファイルの
   // コメント参照）ため、ここでcross-domainのactions.ts経由で取得して渡す。
-  const dealerRows = await getMyDealerAuctions({ groupId });
+  // getMyDealerAuctionsは未ログインだと例外を投げる。app/層はlib/supabase/
+  // serverを直接importできない（ESLint boundaries）ため、この呼び出し自体を
+  // try/catchしてリダイレクトに変換する（features/groups/[groupId]/page.tsx
+  // と同じ理由。2026-08-23レビュー指摘: 未ログイン時に500になっていた）。
+  let dealerRows: Awaited<ReturnType<typeof getMyDealerAuctions>>;
+  try {
+    dealerRows = await getMyDealerAuctions({ groupId });
+  } catch (error) {
+    if (error instanceof Error && error.message === "ログインが必要です") {
+      redirect(`/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/secrets`)}`);
+    }
+    throw error;
+  }
+
   const dealer: SecretListItem[] = dealerRows.map((row) => ({
     id: row.secret_group_item_id,
     groupId,
