@@ -9,6 +9,7 @@ import {
   createAvatarUploadUrl as createAvatarUploadUrlInStorage,
 } from "@/lib/supabase/storage";
 import { createProfile } from "@/features/auth/server/create-profile";
+import { getProfile } from "@/features/auth/server/get-profile";
 
 // ログイン後に戻したいページ。省略時はコールバック側で"/"にする。
 const redirectToSchema = z.object({
@@ -119,15 +120,38 @@ export async function completeProfile(input: {
 }
 
 /**
- * Magic Linkメール内リンクの遷移先（app/auth/callback/route.ts）から呼ばれる。
- * `code`をセッションに交換するだけで、Supabase Client（Auth用途）を直接扱うのは
- * lib/supabase/server.ts経由のここに閉じる（app/からlib/supabase/serverを
- * 直接importしないため。docs/アーキテクチャ.md §1.1参照）。
+ * Magic Link / Google共通のコールバック遷移先（app/auth/callback/route.ts）
+ * から呼ばれる。`code`をセッションに交換するだけで、Supabase Client（Auth用途）
+ * を直接扱うのはlib/supabase/server.ts経由のここに閉じる（app/からlib/supabase/
+ * serverを直接importしないため。docs/アーキテクチャ.md §1.1参照）。
+ *
+ * 2026-08-22（issue #72、Google OAuth接続時に追加）: 初回OAuthログインだと
+ * public.usersの行がまだ無い（作成経路はcompleteProfileのみだが、専用の
+ * オンボーディング画面はまだ実装されていない）。行が無ければGoogleの
+ * user_metadata（full_name/name）を仮ニックネームとしてcreate_profileを
+ * 呼び、最低限アプリが動く状態にする。Magic Link（メールのみでニックネーム
+ * 情報が無い）の場合はfallbackとしてメールのローカル部を使う。
+ * ニックネームは後からアカウント設定（⑮）で変更できる想定。
  */
 export async function exchangeCodeForSession(code: string): Promise<boolean> {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
-  return !error;
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error || !data.user) {
+    return false;
+  }
+
+  const existingProfile = await getProfile(data.user.id);
+  if (!existingProfile) {
+    const metadata = data.user.user_metadata as Record<string, unknown>;
+    const fallbackNickname =
+      (typeof metadata.full_name === "string" && metadata.full_name) ||
+      (typeof metadata.name === "string" && metadata.name) ||
+      data.user.email?.split("@")[0] ||
+      "ゲスト";
+    await createProfile(data.user.id, fallbackNickname.slice(0, 50), null);
+  }
+
+  return true;
 }
 
 async function resolveOrigin() {
