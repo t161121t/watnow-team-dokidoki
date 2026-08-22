@@ -28,7 +28,11 @@ export function ChallengeScreen({
       <h2 className="mb-3 text-lg font-bold">本日のチャレンジ</h2>
       <div className="space-y-4">
         {challenges.map((challenge) => (
-          <ChallengeCard key={challenge.id} challenge={challenge} />
+          <ChallengeCard
+            key={challenge.id}
+            groupId={group.id}
+            challenge={challenge}
+          />
         ))}
       </div>
       <BottomNavigation items={getGroupNavigation(group.id)} active="challenges" />

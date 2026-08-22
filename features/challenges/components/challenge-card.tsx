@@ -1,7 +1,9 @@
-import { MockActionButton } from "@/components/ui/mock-action-button";
+import Link from "next/link";
+
+import { neonButtonVariants } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
-import { cn } from "@/lib/utils";
 import type { Challenge } from "@/lib/types/challenge";
+import { cn } from "@/lib/utils";
 
 const borders: Record<Challenge["tone"], string> = {
   pink: "border-[#c038ff]/75",
@@ -9,24 +11,40 @@ const borders: Record<Challenge["tone"], string> = {
   violet: "border-[#914dff]/70",
 };
 
-export function ChallengeCard({ challenge }: { challenge: Challenge }) {
+export function ChallengeCard({
+  groupId,
+  challenge,
+}: {
+  groupId: string;
+  challenge: Challenge;
+}) {
   return (
-    <NeonCard className={cn("p-4", borders[challenge.tone])}>
-      <h3 className="font-bold">{challenge.title}</h3>
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs font-black text-[#e692ff]">
-          +{challenge.reward}pt
-        </span>
-        <span className="text-[10px] text-white/38">{challenge.attemptsLabel}</span>
-      </div>
-      <MockActionButton
-        variant="secondary"
-        size="sm"
-        className="mt-4 w-full"
-        feedback={`${challenge.reward}pt獲得しました`}
+    <Link
+      href={`/groups/${groupId}/challenges/${challenge.id}`}
+      className="group block focus-visible:outline-none"
+    >
+      <NeonCard
+        className={cn(
+          "flex items-center justify-between gap-3 p-4 transition group-hover:-translate-y-0.5 group-hover:border-[#d75cff] group-focus-visible:ring-2 group-focus-visible:ring-[#c038ff]",
+          borders[challenge.tone],
+        )}
       >
-        挑戦する
-      </MockActionButton>
-    </NeonCard>
+        <div className="min-w-0">
+          <h3 className="font-bold">{challenge.title}</h3>
+          <p className="mt-1 text-xs text-white/55">{challenge.description}</p>
+          <p className="mt-2 text-xs font-black text-[#e692ff]">
+            クリアで{challenge.reward}pt
+          </p>
+        </div>
+        <span
+          className={cn(
+            neonButtonVariants({ variant: "quiet", size: "sm" }),
+            "shrink-0 rounded-md border-white/80 bg-white text-black hover:bg-white",
+          )}
+        >
+          詳細
+        </span>
+      </NeonCard>
+    </Link>
   );
 }
