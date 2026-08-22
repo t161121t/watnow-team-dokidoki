@@ -16,10 +16,6 @@ const redirectToSchema = z.object({
   redirectTo: z.string().startsWith("/").optional(),
 });
 
-const magicLinkSchema = redirectToSchema.extend({
-  email: z.string().email(),
-});
-
 const passwordSignInSchema = redirectToSchema.extend({
   email: z.string().trim().email(),
   password: z.string().min(8),
@@ -30,33 +26,9 @@ const passwordSignUpSchema = passwordSignInSchema.extend({
 });
 
 /**
- * Magic Linkでのサインイン/サインアップ。新規メールアドレスなら
- * Supabase Auth側が自動でauth.usersを作成する（新規/既存の分岐はSupabase任せ）。
- * public.usersの作成はここでは行わない（オンボーディング完了時のcompleteProfileで行う）。
- */
-export async function signInWithMagicLink(input: {
-  email: string;
-  redirectTo?: string;
-}) {
-  const parsed = magicLinkSchema.parse(input);
-  const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
-  const supabase = await createSupabaseServerClient();
-
-  const { error } = await supabase.auth.signInWithOtp({
-    email: parsed.email,
-    options: { emailRedirectTo: callbackUrl },
-  });
-
-  if (error) {
-    throw new Error("ログインリンクの送信に失敗しました");
-  }
-}
-
-/**
- * Googleでのサインイン/サインアップ（issue #72）。Magic Linkと同じく、
- * 新規/既存の判定・auth.usersの作成はSupabase Auth側に任せる。public.usersの
- * 作成はここでは行わない（オンボーディング完了時のcompleteProfileで行う。
- * signInWithMagicLinkと同じ流れ）。
+ * Googleでのサインイン/サインアップ（issue #72）。新規/既存の判定・auth.usersの
+ * 作成はSupabase Auth側に任せる。public.usersの作成はここでは行わない
+ * （オンボーディング完了時のcompleteProfileで行う）。
  *
  * signInWithOAuthはリダイレクト先URLを返すだけで自分ではリダイレクトしない
  * （ブラウザの遷移が必要なため）。Server Action内でnext/navigationのredirect()
@@ -80,7 +52,7 @@ export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
 }
 
 /**
- * メールアドレス・パスワードでのログイン（issue #76）。Magic Link/Googleと違い
+ * メールアドレス・パスワードでのログイン（issue #76）。Googleと違い
  * リダイレクトを挟まずこのServer Action内でセッションが確立するため、
  * 成功時はそのままredirect()する。
  */
@@ -106,8 +78,8 @@ export async function signInWithPassword(input: {
 
 /**
  * メールアドレス・パスワードでの新規登録（issue #76）。ニックネームはサインアップ
- * 画面で既に入力させているため、Magic Link/Googleと違いオンボーディングでの
- * 追加入力を待たず、ここで直接public.usersを作成する。
+ * 画面で既に入力させているため、Googleと違いオンボーディングでの追加入力を
+ * 待たず、ここで直接public.usersを作成する。
  *
  * Supabase側の「メール確認」設定が有効な場合、`signUp`は成功してもセッションを
  * 返さない（`data.session === null`）。この場合はまだプロフィールを作成できない
@@ -222,18 +194,18 @@ export async function completeProfile(input: {
 }
 
 /**
- * Magic Link / Google共通のコールバック遷移先（app/auth/callback/route.ts）
- * から呼ばれる。`code`をセッションに交換するだけで、Supabase Client（Auth用途）
- * を直接扱うのはlib/supabase/server.ts経由のここに閉じる（app/からlib/supabase/
- * serverを直接importしないため。docs/アーキテクチャ.md §1.1参照）。
+ * Google OAuth / メールアドレス・パスワード共通のコールバック遷移先
+ * （app/auth/callback/route.ts）から呼ばれる。`code`をセッションに交換するだけで、
+ * Supabase Client（Auth用途）を直接扱うのはlib/supabase/server.ts経由のここに
+ * 閉じる（app/からlib/supabase/serverを直接importしないため。
+ * docs/アーキテクチャ.md §1.1参照）。
  *
  * 2026-08-22（issue #72、Google OAuth接続時に追加）: 初回OAuthログインだと
  * public.usersの行がまだ無い（作成経路はcompleteProfileのみだが、専用の
  * オンボーディング画面はまだ実装されていない）。行が無ければGoogleの
- * user_metadata（full_name/name）を仮ニックネームとしてcreate_profileを
- * 呼び、最低限アプリが動く状態にする。Magic Link（メールのみでニックネーム
- * 情報が無い）の場合はfallbackとしてメールのローカル部を使う。
- * ニックネームは後からアカウント設定（⑮）で変更できる想定。
+ * user_metadata（full_name/name）を仮ニックネームとしてcreate_profileを呼び、
+ * 最低限アプリが動く状態にする。ニックネームは後からアカウント設定（⑮）で
+ * 変更できる想定。
  *
  * 2026-08-22（issue #76、メールアドレス・パスワード認証の確認メールリンク経由）:
  * メール確認が必要な設定の場合、signUpWithPasswordはセッションを持たないまま
@@ -270,7 +242,7 @@ async function resolveOrigin() {
   return `${protocol}://${host}`;
 }
 
-/** signInWithMagicLink/signInWithGoogle共通。app/auth/callback/route.tsへのURLを組み立てる。 */
+/** signInWithGoogle/signUpWithPassword共通。app/auth/callback/route.tsへのURLを組み立てる。 */
 async function buildCallbackUrl(redirectTo?: string) {
   const origin = await resolveOrigin();
   const callbackUrl = new URL("/auth/callback", origin);
