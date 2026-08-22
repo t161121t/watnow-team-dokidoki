@@ -148,10 +148,17 @@ async function main() {
   const listedItem = await prisma.secretGroupItem.findUniqueOrThrow({ where: { id: item.id } });
   assert(listedItem.status === "listed", "list_secret_for_auction: statusがlistedになる");
 
-  const sellerWallet = await prisma.wallet.findUniqueOrThrow({
+  // 2026-08-23レビュー反映: 前払い（P4）のcreditはlist_secret_for_auctionでは
+  // なくapprove_dealer_assignmentで行う（承認前に辞退が続き最終的に誰も
+  // 承認できないケースで、出品者に前払いだけ残ってしまうのを防ぐため。
+  // ユーザー報告で発覚。scripts/verify-auctions.mtsにも同種の検証あり）。
+  const sellerWalletBeforeApproval = await prisma.wallet.findUniqueOrThrow({
     where: { groupId_userId: { groupId, userId: seller } },
   });
-  assert(sellerWallet.balance === 100, "list_secret_for_auction: 前払い(asking_price分)がsellerに入る");
+  assert(
+    sellerWalletBeforeApproval.balance === 0,
+    "list_secret_for_auction: 前払いはまだcreditされない（承認待ちの間は出品者残高が動かない）",
+  );
 
   // listed後はregistered状態向けRPCが使えなくなる
   await assertRejects(
@@ -171,6 +178,15 @@ async function main() {
 
   // --- ディーラー承認・入札・確定（my_secret_collection_viewの「落札者」分岐検証のため） ---
   await withRlsContext(dealer, (tx) => tx.$executeRaw`SELECT approve_dealer_assignment(${auctionId}::uuid)`);
+
+  const sellerWalletAfterApproval = await prisma.wallet.findUniqueOrThrow({
+    where: { groupId_userId: { groupId, userId: seller } },
+  });
+  assert(
+    sellerWalletAfterApproval.balance === 100,
+    `approve_dealer_assignment: 承認時点で前払い(asking_price分)がsellerに入る（実際:${sellerWalletAfterApproval.balance}）`,
+  );
+
   await withRlsContext(bidder, (tx) => tx.$executeRaw`SELECT place_bid(${auctionId}::uuid, 120)`);
 
   await prisma.auction.update({

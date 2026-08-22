@@ -1,12 +1,19 @@
 -- docs/DB.md §6.2, §10.0
 -- listed化、auctions行作成（status=pending_dealer_approval、starts_at/ends_atはnull）、
--- dealerランダム選抜、前払いcredit（P4=出品価格と同額）
+-- dealerランダム選抜
 --
 -- 2026-08-18 PRレビュー反映:
 -- - 脱退/kick後でも旧owner権限だけでlistできてしまったため is_group_member を追加
 -- - soft delete済み(deleted_at)のsecretをlistできてしまったため除外
 -- - no_sale後returnedになったitemを再出品できなかったため registered/returned 両方を許可し、
 --   価格基準は asking_price ではなく current_value（目減り後の価値）を使う
+--
+-- 2026-08-23 ユーザー報告反映: 前払い（P4）のcreditは、以前はここ（出品/list時点）
+-- で行っていたが、approve_dealer_assignmentに移した。ディーラーが承認する前に
+-- 出品者へポイントが動いてしまうと、ディーラーが辞退を繰り返して最終的に
+-- 承認可能なディーラーがいなくなった場合（no eligible dealer）でも、出品者は
+-- 既に前払いを受け取ったままになってしまうため（listing_prepay_amount自体は
+-- ここでauctions行に確定させておき、実際のcreditはapprove_dealer_assignment側で行う）。
 
 CREATE OR REPLACE FUNCTION list_secret_for_auction(p_secret_group_item_id uuid)
 RETURNS auctions
@@ -76,8 +83,8 @@ BEGIN
 
   UPDATE secret_group_items SET status = 'listed', updated_at = now() WHERE id = v_item.id;
 
-  -- P4: 前払い = （再出品後の）出品価格と同額（100%）
-  PERFORM _credit_wallet(v_item.group_id, v_seller_id, v_price, 'listing_prepay', 'secret_group_items', v_item.id);
+  -- P4の前払いcredit（出品価格と同額、100%）はapprove_dealer_assignmentで
+  -- ディーラー承認時に行う（上記コメント参照）。
 
   RETURN v_auction;
 END;
