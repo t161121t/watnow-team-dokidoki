@@ -7,6 +7,7 @@ import {
   createAvatarUploadUrl,
 } from "@/lib/supabase/storage";
 import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
+import { getGroup as getGroupInDb } from "@/features/groups/server/get-group";
 import { getMyGroups as getMyGroupsInDb } from "@/features/groups/server/get-my-groups";
 import { createInviteLink as createInviteLinkInDb } from "@/features/groups/server/create-invite-link";
 import { revokeInviteLink as revokeInviteLinkInDb } from "@/features/groups/server/revoke-invite-link";
@@ -72,6 +73,24 @@ export async function getMyGroups() {
 }
 
 const groupIdSchema = z.object({ groupId: z.string().uuid() });
+
+/**
+ * 単一グループ取得。app/層のグループ配下ページで「このgroupIdのactive
+ * メンバーか」を確認するガード用（RLS: groups_select_memberにより、
+ * 未ログイン/非メンバー/存在しないgroupIdは全てnullになる。例外にしない）。
+ * groupsドメインの合成が要らない、所属確認だけしたい場面向けの軽量版
+ * （features/groups/server/get-my-group-summary.tsのような残高込みの
+ * 合成は不要な場合はこちらを使う）。
+ */
+export async function getGroup(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return null;
+  }
+
+  const parsed = groupIdSchema.parse(input);
+  return getGroupInDb(userId, parsed.groupId);
+}
 
 /**
  * グループ管理（⑤）での招待URL発行/再発行（issue #71）。既存リンクがある場合は

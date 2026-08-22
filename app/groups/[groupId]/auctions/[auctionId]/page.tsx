@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getAnonymousBidFeed, getAuction } from "@/features/auctions/actions";
 import { AuctionRoomScreen } from "@/features/auctions/components/auction-room-screen";
+import { getAuthenticatedUserId } from "@/features/auth/actions";
 import { WalletBalance } from "@/features/wallet/components/wallet-balance";
 
 export default async function AuctionRoomPage({
@@ -17,26 +18,21 @@ export default async function AuctionRoomPage({
     notFound();
   }
 
-  // getAuction/getAnonymousBidFeedは未ログインだと例外を投げる。app/層は
-  // lib/supabase/serverを直接importできない（ESLint boundaries）ため、
-  // この呼び出し自体をtry/catchしてリダイレクトに変換する
-  // （app/groups/[groupId]/page.tsxと同じ理由。2026-08-23レビュー指摘:
-  // 未ログイン時に500になっていた）。
-  let auction: Awaited<ReturnType<typeof getAuction>>;
-  let bidFeed: Awaited<ReturnType<typeof getAnonymousBidFeed>>;
-  try {
-    [auction, bidFeed] = await Promise.all([
-      getAuction({ auctionId }),
-      getAnonymousBidFeed({ auctionId }),
-    ]);
-  } catch (error) {
-    if (error instanceof Error && error.message === "ログインが必要です") {
-      redirect(
-        `/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/auctions/${auctionId}`)}`,
-      );
-    }
-    throw error;
+  // app/層はlib/supabase/serverを直接importできない（ESLint boundaries）
+  // ため、features/auth/actions.tsのgetAuthenticatedUserIdでログイン確認
+  // してから、getAuction/getAnonymousBidFeedを呼ぶ（app/groups/[groupId]/
+  // page.tsxと同じ理由。2026-08-23レビュー指摘）。
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    redirect(
+      `/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/auctions/${auctionId}`)}`,
+    );
   }
+
+  const [auction, bidFeed] = await Promise.all([
+    getAuction({ auctionId }),
+    getAnonymousBidFeed({ auctionId }),
+  ]);
 
   // ルートのgroupIdとauction本来のgroup_idが一致することを確認する。
   // 一致確認をせずに描画すると、別グループのauctionを閲覧できてしまい、
