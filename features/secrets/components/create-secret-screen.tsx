@@ -18,12 +18,16 @@ const categories: SecretCategory[] = ["恋愛", "黒歴史", "趣味", "特技",
 export function CreateSecretScreen({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
+  const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<SecretCategory>("黒歴史");
   const [rarity, setRarity] = useState<1 | 2 | 3 | 4 | 5>(3);
   const [value, setValue] = useState(200);
-  const canContinue = summary.trim().length > 0 && body.trim().length > 0;
+  const canContinue =
+    title.trim().length > 0 &&
+    summary.trim().length > 0 &&
+    body.trim().length > 0;
 
   return (
     <MobileShell>
@@ -54,12 +58,22 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
 
       {step === 1 ? (
         <div className="space-y-6">
-          <NeonField id="secret-summary" label="秘密の見出し">
+          <NeonField id="secret-title" label="秘密の見出し">
             <NeonInput
-              id="secret-summary"
-              value={summary}
+              id="secret-title"
+              value={title}
               maxLength={60}
               placeholder="見出しを入力"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </NeonField>
+          <NeonField id="secret-summary" label="秘密の概要">
+            <NeonTextarea
+              id="secret-summary"
+              value={summary}
+              maxLength={120}
+              className="min-h-28"
+              placeholder="秘密の内容を短く説明（ディーラーが閲覧できます）"
               onChange={(event) => setSummary(event.target.value)}
             />
           </NeonField>
@@ -129,7 +143,13 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
         <div className="space-y-5">
           <NeonCard className="p-5">
             <p className="text-[10px] text-white/40">見出し</p>
-            <h2 className="mt-2 text-base leading-7 font-bold">{summary}</h2>
+            <h2 className="mt-2 text-base leading-7 font-bold">{title}</h2>
+            <div className="mt-4">
+              <p className="text-[10px] text-white/40">概要</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">
+                {summary}
+              </p>
+            </div>
             <div className="my-4 h-px bg-white/10" />
             <p className="text-[10px] text-white/40">本文</p>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">{body}</p>
