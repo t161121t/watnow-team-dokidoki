@@ -7,7 +7,9 @@ import {
   createAvatarUploadUrl,
 } from "@/lib/supabase/storage";
 import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
+import { getGroup as getGroupInDb } from "@/features/groups/server/get-group";
 import { getMyGroups as getMyGroupsInDb } from "@/features/groups/server/get-my-groups";
+import { listGroupMembers as listGroupMembersInDb } from "@/features/groups/server/list-group-members";
 import { createInviteLink as createInviteLinkInDb } from "@/features/groups/server/create-invite-link";
 import { revokeInviteLink as revokeInviteLinkInDb } from "@/features/groups/server/revoke-invite-link";
 import { joinViaInviteLink as joinViaInviteLinkInDb } from "@/features/groups/server/join-via-invite-link";
@@ -75,6 +77,27 @@ export async function getMyGroups() {
 const groupIdSchema = z.object({ groupId: z.string().uuid() });
 
 /**
+ * グループ管理（⑤）・ホーム（⑥）等での単一グループ取得。所属していない
+ * グループの場合はnullが返る（RLS。groups_select_member）。
+ */
+export async function getGroup(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return getGroupInDb(userId, parsed.groupId);
+}
+
+/** グループ管理（⑤）でのメンバー一覧。 */
+export async function getGroupMembers(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = groupIdSchema.parse(input);
+  return listGroupMembersInDb(userId, parsed.groupId);
+}
+
+/**
  * グループ管理（⑤）での招待URL発行/再発行（issue #71）。既存リンクがある場合は
  * コードを再発行し、旧リンクは自動的に無効化される（create_group_invite_link
  * RPCのupsert）。admin確認はRPC側が行う。
@@ -109,14 +132,20 @@ const joinViaInviteLinkSchema = z.object({ code: z.string().min(1) });
 
 /**
  * 招待URLでのグループ参加（issue #71）。新規参加・再参加のいずれもRPC
- * （join_group_via_invite_link）側で処理する。
+ * （join_group_via_invite_link）側で処理する。RPCのRAISE
+ * EXCEPTIONはPrismaの生SQLエラーとして技術的なメッセージ（P0001等）で
+ * 返ってくるため、UI表示用に丸める。
  */
 export async function joinGroupViaInviteLink(input: { code: string }) {
   const userId = await getCurrentUserId();
   requireUserId(userId);
 
   const parsed = joinViaInviteLinkSchema.parse(input);
-  return joinViaInviteLinkInDb(userId, parsed.code);
+  try {
+    return await joinViaInviteLinkInDb(userId, parsed.code);
+  } catch {
+    throw new Error("この招待リンクは無効です（取り消されたか、URLが間違っている可能性があります）");
+  }
 }
 
 /**
