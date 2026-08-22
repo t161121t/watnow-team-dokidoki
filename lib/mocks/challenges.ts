@@ -1,4 +1,5 @@
-import type { Challenge } from "@/lib/types/challenge";
+import { mockMemberships } from "@/lib/mocks/groups";
+import type { ActiveChallenge, Challenge } from "@/lib/types/challenge";
 
 export const mockChallenges: Challenge[] = [
   {
@@ -24,5 +25,26 @@ export const mockChallenges: Challenge[] = [
     reward: 15,
     attemptsLabel: "本日あと2回",
     tone: "blue",
+  },
+];
+
+export const mockActiveChallenges: ActiveChallenge[] = [
+  {
+    id: "active-daily-call",
+    frequencyLabel: "1日1回チャレンジ",
+    reward: 50,
+    approvals: mockMemberships.map(({ user }, index) => ({
+      member: user,
+      approved: index !== 2,
+    })),
+  },
+  {
+    id: "active-quick-quiz",
+    frequencyLabel: "10秒クイックチャレンジ",
+    reward: 15,
+    approvals: mockMemberships.map(({ user }, index) => ({
+      member: user,
+      approved: index < 2,
+    })),
   },
 ];
