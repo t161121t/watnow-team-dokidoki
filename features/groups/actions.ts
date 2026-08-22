@@ -8,6 +8,7 @@ import {
 } from "@/lib/supabase/storage";
 import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
 import { getGroup as getGroupInDb } from "@/features/groups/server/get-group";
+import { getMyGroupSummary as getMyGroupSummaryInDb } from "@/features/groups/server/get-my-group-summary";
 import { getMyGroups as getMyGroupsInDb } from "@/features/groups/server/get-my-groups";
 import { createInviteLink as createInviteLinkInDb } from "@/features/groups/server/create-invite-link";
 import { revokeInviteLink as revokeInviteLinkInDb } from "@/features/groups/server/revoke-invite-link";
@@ -90,6 +91,23 @@ export async function getGroup(input: { groupId: string }) {
 
   const parsed = groupIdSchema.parse(input);
   return getGroupInDb(userId, parsed.groupId);
+}
+
+/**
+ * 単一グループ取得（残高・自分のrole込み）。app/層の他ドメイン画面から
+ * 「このgroupIdでの自分のrole/balance」がcross-domainで必要な場面向け
+ * （例: チャレンジ作成ボタンをadminにだけ出す判定。features/groups/server/
+ * get-my-group-summary.ts参照。未ログイン/非メンバー/存在しないgroupIdは
+ * 全てnull。例外にしない）。
+ */
+export async function getMyGroupSummary(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return null;
+  }
+
+  const parsed = groupIdSchema.parse(input);
+  return getMyGroupSummaryInDb(userId, parsed.groupId);
 }
 
 /**
