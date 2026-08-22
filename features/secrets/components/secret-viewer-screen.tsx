@@ -1,7 +1,6 @@
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
-import { BackButton } from "@/components/ui/back-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
 import type { SecretListTab } from "@/features/secrets/secret-list-tab";
@@ -66,11 +65,6 @@ export function SecretViewerScreen({
         </div>
       </NeonCard>
 
-      <BackButton
-        href={backHref}
-        aria-label="秘密リストへ戻る"
-        className="mx-auto mt-6"
-      />
       <BottomNavigation items={getGroupNavigation(secret.groupId)} active="secrets" />
     </MobileShell>
   );
