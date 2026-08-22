@@ -12,7 +12,8 @@ import { isSafeRedirectPath, postAuthDestination } from "@/lib/redirect-path";
  *
  * `redirect_to`が無い（または安全でない）場合は、本人の所属groupを見て
  * 遷移先を決める（docs/画面.md §2: 所属ありならホーム画面⑥、未所属なら
- * 参加/作成。判定はlib/redirect-path.tsのpostAuthDestination）。
+ * グループ一覧（`/groups`）の空状態へ。旧参加/作成ハブ`/groups/join`は
+ * /groupsへ統合済み。判定はlib/redirect-path.tsのpostAuthDestination）。
  * ドメインをまたぐ判断（auth×groups）なのでapp/側（ここ）で両ドメインの
  * actions.tsを呼ぶ形にした（features/README.mdの依存方向に合わせるため。
  * features/auth/actions.tsからfeatures/groups/*を直接importしない）。
