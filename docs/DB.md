@@ -1,8 +1,8 @@
 # DB 設計 — 秘密オークション（仮）
 
-ステータス: 設計ドラフト v5（PRレビュー指摘8件を反映。2026-08-17）  
+ステータス: 設計ドラフト v6（issue #71: 招待方式をURL招待方式に置き換え。2026-08-22）  
 作成日: 2026-08-16  
-更新日: 2026-08-17  
+更新日: 2026-08-22  
 対象: Supabase PostgreSQL / Auth / Realtime / Storage  
 
 v2 での主な変更点:
@@ -37,6 +37,12 @@ v5 での主な変更点（PR #19 のレビュー指摘8件を反映）:
 - レビュー指摘: チャレンジ却下時（`decision='rejected'`）の`status`遷移が未定義だったため追加
 - レビュー指摘: `search_users`をgroup admin限定・最低検索文字数・件数上限付きに変更（ユーザー列挙API化を防止）
 - レビュー指摘: `groups.auction_open_seconds`に`CHECK (> 0)`制約を追加
+
+v6 での主な変更点（issue #71: 招待方式の変更）:
+
+- 2026-08-17に確定した直接招待方式（ニックネーム検索 `search_users` + `invite_member` + `accept_invite`/`decline_invite`）を廃止し、**URL招待方式**（`group_invite_links` + `create_group_invite_link` / `revoke_group_invite_link` / `join_group_via_invite_link`）に完全に置き換えた（ユーザー判断。§4.3、§4.4、§6.1）
+- `join_group_via_invite_link` は旧 `invite_member`＋`accept_invite` の2段階を1つの自己申告RPCに統合。参加は `invited` を経由せず直接 `active` になる
+- リンクは有効期限・使用回数制限を持たない。再発行（upsert）で旧リンクは自動失効。取り消しは行削除のみ（2026-08-17時点の「過剰」判断を踏まえ、実装自体は最小限に留めた）
 
 ---
 
@@ -231,7 +237,7 @@ RLS:
 
 ### 4.3 `group_members`
 
-ユーザーの所属・権限。2026-08-17: 招待コード方式（旧 `group_invites`）を廃止し、直接招待方式に変更。招待〜参加を `status` の遷移として表現する（§4.4参照）。
+ユーザーの所属・権限。2026-08-17: 招待コード方式（旧 `group_invites`）を廃止し、直接招待方式に変更。2026-08-22: 直接招待方式（ニックネーム検索）をさらに廃止し、URL招待方式（`group_invite_links`、§4.4）に置き換えた（issue #71）。参加は `join_group_via_invite_link` の単一RPCで完結し、`invited` を経由せず直接 `active` になる。
 
 
 | カラム         | 型               | 制約 / 用途                                    |
@@ -240,36 +246,35 @@ RLS:
 | `user_id`   | `uuid`          | PK part / FK `users.id`                      |
 | `role`      | `member_role`   | not null default `member`                    |
 | `status`    | `member_status` | not null default `invited`                   |
-| `invited_by`| `uuid`          | FK `users.id`。招待した admin                    |
+| `invited_by`| `uuid`          | FK `users.id`。招待リンクの発行者                |
 | `invited_at`| `timestamptz`   | not null                                     |
-| `joined_at` | `timestamptz`   | nullable。`accept_invite` で確定するまで null       |
+| `joined_at` | `timestamptz`   | nullable。参加確定まで null                        |
 | `left_at`   | `timestamptz`   | nullable                                     |
 
 
 `status` の遷移:
 
 ```text
-invited（招待された・未承諾）
-  → active（本人が accept_invite で承諾。wallet 作成/再初期化）
+（新規参加。join_group_via_invite_link で直接 active になる。wallet 作成）
+  → active
   → left（本人が leave_group）
   → kicked（admin が kick_group_member）
-
-invited → （削除）: 本人が decline_invite で辞退した場合、行ごと削除する
 ```
 
-**`invite_member` の再招待時の挙動**（2026-08-17レビュー反映。`(group_id, user_id)` unique のため、脱退/kick後は行が残ったまま新規INSERTできない問題への対応）:
+`invited` は enum の欠番として残しているが、新方式では通常発生しない（過去の直接招待方式の名残。§6.1 `join_group_via_invite_link` 参照）。
+
+**`join_group_via_invite_link` の再参加時の挙動**（`(group_id, user_id)` unique のため、脱退/kick後は行が残ったまま新規INSERTできない問題への対応。旧 `invite_member` の再招待ロジックを踏襲）:
 
 ```text
-invite_member(group_id, user_id)
-  既存行なし        → status='invited' で INSERT
-  status='invited'  → no-op（何もしない。二重招待エラーにはしない）
-  status='active'   → エラー（既にメンバー）
-  status='left' / 'kicked' → status='invited' に UPDATE
+join_group_via_invite_link(code)
+  既存行なし              → status='active' で INSERT（joined_at=now()）
+  status='active'         → no-op（既にメンバー。エラーにはしない）
+  status='left' / 'kicked' → status='active' に UPDATE
                               （role は 'member' にリセット、invited_by/invited_at を更新、
-                               joined_at/left_at は null に戻す）
+                               joined_at=now()、left_at は null に戻す）
 ```
 
-**再参加時の wallet**: `accept_invite` は `wallets` に既存行（`expired_at` が入っている＝過去に脱退済み）があれば `balance = 0` にリセットして `expired_at = null` に戻す（ポイントは持ち越さない。`機能要件.md` §3「脱退時にそのグループのポイントは失効」と整合）。既存行がなければ新規作成する。
+**再参加時の wallet**: `join_group_via_invite_link` は `wallets` に既存行（`expired_at` が入っている＝過去に脱退済み）があれば `balance = 0` にリセットして `expired_at = null` に戻す（ポイントは持ち越さない。`機能要件.md` §3「脱退時にそのグループのポイントは失効」と整合）。既存行がなければ新規作成する。
 
 制約:
 
@@ -279,25 +284,30 @@ invite_member(group_id, user_id)
 RLS:
 
 - 同じグループの active member は member 一覧を select 可
-- `invited` 本人は自分の招待行のみ select 可（グループの他メンバー一覧は見えない）
 - role / status の変更は admin RPC 経由
-- 招待の承諾・辞退は本人の `accept_invite` / `decline_invite` RPC 経由
+- グループへの参加は本人の `join_group_via_invite_link` RPC 経由
 - 自分の脱退は `leave_group` RPC 経由
 
 ---
 
 
 
-### 4.4 `group_invites`（2026-08-17 廃止）
+### 4.4 `group_invite_links`（2026-08-22: URL招待方式で復活。旧 `group_invites` の後継。issue #71）
 
-招待コード/招待リンク方式は採用せず、**直接招待方式**に変更した。ハッカソンMVPのスコープでは、コードの発行・失効・使用回数管理までは過剰と判断（`docs/アーキテクチャ比較.md`関連の議論を参照）。
+2026-08-17に「ハッカソンMVPのスコープでは、コードの発行・失効・使用回数管理までは過剰」として直接招待方式（ニックネーム検索）を採用したが、2026-08-22にこの判断を覆し、**URL招待方式**に完全に置き換えた（ユーザー判断。既存の直接招待方式は撤去済み）。当時の懸念（コードの発行・失効・使用回数管理が過剰）を踏まえ、実装は意図的に最小限に留めている: 有効期限・使用回数制限は持たず、`group_id` を PK にすることで「グループごとに有効なリンクは常に最大1つ」を表現する（再発行は upsert で自動的に旧リンクを無効化。取り消しは行削除のみ）。
 
-代わりに:
+| カラム         | 型            | 制約 / 用途                                |
+| ----------- | ------------ | ---------------------------------------- |
+| `group_id`  | `uuid`       | PK / FK `groups.id`（1グループにつき最大1リンク）       |
+| `code`      | `text`       | unique。`gen_random_uuid()::text`         |
+| `created_by`| `uuid`       | FK `users.id`。発行した admin                |
+| `created_at`| `timestamptz`| not null default `now()`                  |
 
-- admin が `users` をニックネームで検索し（§6.1 `search_users`）、対象ユーザーを指定して招待する（`invite_member`、§6.1）
-- 招待〜参加は `group_members.status` の遷移で表現する（§4.3）。新規テーブルは不要
+RLS:
 
-このセクション番号は他章からの参照を壊さないため欠番として残す。
+- admin のみ select 可（`is_group_admin(group_id)`）。非adminには見えない
+- 発行・再発行・取り消しは admin RPC（`create_group_invite_link` / `revoke_group_invite_link`）経由
+- リンク経由の参加自体は `code` を知っていれば誰でも呼べる自己申告RPC（`join_group_via_invite_link`、§4.3・§6.1）で、このテーブルへの直接アクセスは不要
 
 ---
 
@@ -814,10 +824,9 @@ RLS / view 条件:
 | --------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `create_profile(nickname, avatar_path)`             | Supabase Auth サインアップ後、オンボーディングで一度だけ呼ぶ。`users` 行の唯一の作成経路（`auth.users` とはFK無しの1:1、SECURITY DEFINER。§4.1・§7.2）。2026-08-18実装（`prisma/sql/auth/001_create_profile.sql`） |
 | `create_group(name, icon_path)`                     | group 作成、作成者を admin member（`active`）にする、wallet 初期化                            |
-| `search_users(group_id, query)`                      | 呼び出しユーザーが `group_id` の admin であることを検証してから実行（2026-08-17レビュー反映）。ニックネームの部分一致検索。`id, nickname, avatar_path` のみ返す。`query` 最低2文字、結果は最大20件、既にそのgroupの `group_members` にいるユーザーは除外 |
-| `invite_member(group_id, user_id)`                  | admin のみ。既存行の有無で挙動が変わる（再招待対応。§4.3詳細）。旧 `join_group(invite_code)` を置き換え（§4.4） |
-| `accept_invite(group_id)`                           | 本人のみ。`invited` → `active`、`joined_at` 確定。wallet は新規作成 or 既存行を `balance=0` にリセットして再利用（§4.3詳細） |
-| `decline_invite(group_id)`                          | 本人のみ。`invited` 行を削除                                                          |
+| `create_group_invite_link(group_id)`                | admin のみ。招待URLの発行/再発行（upsert。既存リンクは自動失効。§4.4詳細）                        |
+| `revoke_group_invite_link(group_id)`                | admin のみ。招待URLの取り消し（行削除）                                                  |
+| `join_group_via_invite_link(code)`                  | 本人のみ。`code` が有効なら直接 `active` 化（新規 or 再参加。§4.3詳細）。wallet は新規作成 or 既存行を `balance=0` にリセットして再利用。旧 `invite_member`+`accept_invite` を統合（2026-08-22、issue #71） |
 | `leave_group(group_id)`                             | member status を left、wallet を expired。最後の admin なら拒否                          |
 | `update_group_member_role(group_id, user_id, role)` | admin 権限付与 / 剥奪。最後の admin 剥奪は拒否                                               |
 | `kick_group_member(group_id, user_id)`              | admin による kick。wallet 失効                                                     |
@@ -926,7 +935,8 @@ is_group_admin(target_group_id uuid) returns boolean
 | --------------------- | --------------------------- | ------------------------ |
 | `users`            | 本人 + 同 group member の表示情報   | 本人のみ update              |
 | `groups`              | active member               | admin RPC                |
-| `group_members`       | 同 group member（`invited` 本人は自分の行のみ） | `invite_member` / `accept_invite` / `decline_invite` / admin RPC |
+| `group_members`       | 同 group member                          | `join_group_via_invite_link` / admin RPC |
+| `group_invite_links`  | admin のみ                               | `create_group_invite_link` / `revoke_group_invite_link` RPC |
 | `wallets`             | 本人のみ                        | wallet RPC               |
 | `wallet_ledger`       | 本人のみ                        | wallet RPC               |
 | `secrets`             | owner / access holder       | owner の出品前 RPC           |
@@ -1129,7 +1139,7 @@ no_sale
 - `SECURITY DEFINER` Function は `search_path` を固定する
 - Function 冒頭で必ず `auth.uid()` と `group_id` の所属確認をする
 - サービスロール前提の通常 UI 操作を作らない
-- `search_users` はニックネーム部分一致検索で事実上のユーザー列挙APIになり得るため、group admin限定・最低検索文字数・件数上限を課す（§6.1）
+- 招待URLの `code` は `gen_random_uuid()::text` で推測不能にし、`group_invite_links` はadmin以外selectできない（§4.4・§6.1。2026-08-22、issue #71）
 
 ---
 
@@ -1138,7 +1148,7 @@ no_sale
 ## 12. Migration 実装順
 
 1. enum / helper function
-2. users / groups / group_members（`group_invites` は廃止。§4.4参照）
+2. users / groups / group_members / group_invite_links（旧 `group_invites` は廃止、後に §4.4 の形で復活。§4.4参照）
 3. wallets / wallet_ledger / wallet helper
 4. secrets / secret_group_items
 5. auctions / bids（`secret_accesses` / `dealer_declines` は廃止。§4.12・§4.13参照）
@@ -1170,7 +1180,7 @@ no_sale
 | 不落札     | prepay 没収でマイナス残高になり得る。候補全滅（全員残高不足）でも no_sale になる                                             |
 | 秘密本文    | 落札前に owner 以外が読めない。落札後は winner が読める                                                          |
 | チャレンジ   | 自己承認不可、1件目の承認で即付与・以降は二重付与されない                                                                |
-| 招待      | `invited` の間は自分の招待行しか見えない（他メンバー一覧は見えない）。`accept_invite` で `active` 化と同時に wallet が作られる。`decline_invite` で行が消える |
+| 招待      | 招待URLは admin のみ発行・閲覧・取り消し可。`join_group_via_invite_link` で `active` 化と同時に wallet が作られる（新規 or 再参加。issue #71） |
 | ディーラー承認 | `pending_dealer_approval` 以外では `approve_dealer_assignment` / `decline_dealer` が失敗する。dealer 本人以外は実行不可 |
 | ディーラー辞退 | 辞退のたびに `asking_price * 5%` が debit され、`dealer_id` が新しい dealer に更新される。`open` 後は辞退不可 |
 | 入札者開示   | seller・dealer は `bidder_identified_view` で bidder を識別できる。それ以外は匿名 view のみ                        |
@@ -1193,7 +1203,7 @@ no_sale
 | ~~DB-6~~ | ~~wallet 残高を他メンバーに公開する UI があるか~~ → **解決済み**。作らない                        | `wallets` RLS / ranking view（追加なし）   |
 | ~~DB-7~~ | ~~コメント / リアクションを MVP に入れるか~~ → **解決済み**。MVP には入れない                     | secret viewer 周辺テーブル（追加なし）          |
 | DB-8     | ディーラー承認の無期限待機（P1）が長時間放置された場合の運用フォロー（リマインド通知等）                            | Phase 2。MVP は幹事の手動フォローに委ねる（`PRD.md` §9） |
-| ~~DB-9~~ | ~~招待コード（`group_invites`）を作るか、直接招待方式にするか~~ → **解決済み（2026-08-17）**。直接招待方式に変更、テーブル廃止 | §4.3、§4.4、§6.1 |
+| ~~DB-9~~ | ~~招待コード（`group_invites`）を作るか、直接招待方式にするか~~ → **解決済み（2026-08-17）**。直接招待方式に変更、テーブル廃止 → **2026-08-22に再度覆り、URL招待方式（`group_invite_links`）に置き換え**（issue #71） | §4.3、§4.4、§6.1 |
 | ~~DB-10~~ | ~~チャレンジ承認を複数人承認クオラムのまま作るか~~ → **解決済み**。単一承認に簡略化 | §4.14、§6.4 |
 | ~~DB-11~~ | ~~`group_auction_settings` をテーブルのまま持つか~~ → **解決済み**。P2のみ`groups`へ、他はアプリ定数化 | §4.2、§4.5 |
 | DB-12 | 次点繰り上げ（§10.2.1）・落札確定2段階化（§10.2）は簡略化せず維持することを確認済み。実装量は増えるままなので、テスト（§13）を優先的に書く | §10.2、§10.2.1 |

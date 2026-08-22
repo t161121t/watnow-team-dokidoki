@@ -11,7 +11,7 @@
 -- 対応するUPDATEのみ付与する。
 
 GRANT SELECT ON
-  users, groups, group_members, wallets, wallet_ledger,
+  users, groups, group_members, group_invite_links, wallets, wallet_ledger,
   secrets, secret_group_items, auctions, bids, challenges, challenge_attempts
 TO authenticated;
 

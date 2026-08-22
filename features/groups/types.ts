@@ -27,8 +27,9 @@ export type GroupMemberRow = {
   left_at: Date | null;
 };
 
-export type UserSearchResultRow = {
-  id: string;
-  nickname: string;
-  avatar_path: string | null;
+export type GroupInviteLinkRow = {
+  group_id: string;
+  code: string;
+  created_by: string;
+  created_at: Date;
 };

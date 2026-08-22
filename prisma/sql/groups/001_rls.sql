@@ -56,9 +56,11 @@ CREATE POLICY group_members_select_member_roster ON group_members
   USING (
     -- 同じグループの active member はロースター全体を見られる
     is_group_member(group_id)
-    -- invited 本人は自分の招待行だけ見える
+    -- 本人の行（'invited'は2026-08-22のURL招待方式移行後は実質使われないが、
+    -- 過去データ互換のため条件自体は残す）
     OR (user_id = auth.uid())
   );
 
--- insert/update/deleteポリシーは定義しない（invite_member/accept_invite/decline_invite/
--- update_group_member_role/kick_group_member/leave_group のRPC経由のみ）
+-- insert/update/deleteポリシーは定義しない（join_group_via_invite_link/
+-- update_group_member_role/kick_group_member/leave_group のRPC経由のみ。
+-- prisma/sql/groups/003_group_invite_links.sql参照）
