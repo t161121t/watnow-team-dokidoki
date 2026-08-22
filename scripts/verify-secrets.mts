@@ -200,12 +200,62 @@ async function main() {
     "my_secret_collection_view: 落札者は落札した秘密が見える（winner分岐）",
   );
 
+  // --- getCollectionItem相当（features/secrets/server/get-collection-item.ts） ---
+  // my_secret_collection_viewには無い落札価格・出品者名を、auctions/usersから
+  // 追加で合成する（秘密ビューワー⑫用）。
+  const collectionItem = await withRlsContext(bidder, async (tx) => {
+    const rows = await tx.$queryRaw<{ auction_id: string; seller_id: string }[]>`
+      SELECT * FROM my_secret_collection_view
+      WHERE group_id = ${groupId}::uuid AND secret_id = ${item.secret_id}::uuid
+    `;
+    const row = rows[0];
+    const [auction, sellerUser] = await Promise.all([
+      tx.auction.findUnique({ where: { id: row.auction_id }, select: { finalPrice: true } }),
+      tx.user.findUnique({ where: { id: row.seller_id }, select: { nickname: true } }),
+    ]);
+    return { finalPrice: auction?.finalPrice, sellerNickname: sellerUser?.nickname };
+  });
+  assert(
+    collectionItem.finalPrice === finalAuction.finalPrice,
+    "getCollectionItem相当: 落札価格(auctions.final_price)が取得できる",
+  );
+  assert(
+    typeof collectionItem.sellerNickname === "string" && collectionItem.sellerNickname.length > 0,
+    "getCollectionItem相当: 出品者のnicknameが取得できる",
+  );
+
   const dealerCollection = await withRlsContext(dealer, (tx) =>
     tx.$queryRaw<{ secret_id: string }[]>`SELECT * FROM my_secret_collection_view WHERE group_id = ${groupId}::uuid`,
   );
   assert(
     !dealerCollection.some((r) => r.secret_id === item.secret_id),
     "my_secret_collection_view: ディーラーは出品者でも落札者でもないので見えない",
+  );
+
+  // --- users_select_auction_counterparty（prisma/sql/secrets/005_collection_history_policy.sql） ---
+  // 出品者がグループを脱退した後も、落札者からその出品者のnicknameが引き続き
+  // 取得できることを確認する（2026-08-22レビュー指摘。以前はusers_select_
+  // self_or_group_memberのみで、脱退後は「不明」になっていた）。
+  // 最後のadminは脱退できないため、先にdealerをadmin化してから脱退させる。
+  await withRlsContext(seller, (tx) =>
+    tx.$executeRaw`SELECT update_group_member_role(${groupId}::uuid, ${dealer}::uuid, 'admin'::member_role)`,
+  );
+  await withRlsContext(seller, (tx) => tx.$executeRaw`SELECT leave_group(${groupId}::uuid)`);
+
+  const sellerNicknameAfterLeaving = await withRlsContext(bidder, (tx) =>
+    tx.user.findUnique({ where: { id: seller }, select: { nickname: true } }),
+  );
+  assert(
+    sellerNicknameAfterLeaving?.nickname === "SecretsTest0",
+    "users_select_auction_counterparty: 出品者が脱退後も落札者からnicknameが見える",
+  );
+
+  const sellerNicknameForOutsider = await withRlsContext(outsider, (tx) =>
+    tx.user.findUnique({ where: { id: seller }, select: { nickname: true } }),
+  );
+  assert(
+    sellerNicknameForOutsider === null,
+    "users_select_auction_counterparty: 取引に無関係な第三者には引き続き見えない",
   );
 
   console.log("\nALL CHECKS PASSED");

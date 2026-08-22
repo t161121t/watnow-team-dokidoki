@@ -9,6 +9,7 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonTextarea } from "@/components/ui/neon-field";
 import { StarRating } from "@/components/ui/star-rating";
+import { registerSecret } from "@/features/secrets/actions";
 import { cn } from "@/lib/utils";
 import type { SecretCategory } from "@/lib/types/secret";
 
@@ -17,19 +18,36 @@ const categories: SecretCategory[] = ["恋愛", "黒歴史", "趣味", "特技",
 export function CreateSecretScreen({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
-  const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<SecretCategory>("黒歴史");
   const [rarity, setRarity] = useState<1 | 2 | 3 | 4 | 5>(3);
   const [price, setPrice] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const numericPrice = Number(price);
   const isPriceValid = Number.isInteger(numericPrice) && numericPrice > 0;
   const canContinue =
-    title.trim().length > 0 &&
-    summary.trim().length > 0 &&
-    body.trim().length > 0 &&
-    isPriceValid;
+    summary.trim().length > 0 && body.trim().length > 0 && isPriceValid;
+
+  const handleRegister = async () => {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await registerSecret({
+        groupId,
+        body,
+        summary,
+        category,
+        rarity,
+        askingPrice: numericPrice,
+      });
+      router.push(`/groups/${groupId}/secrets`);
+    } catch {
+      setIsSubmitting(false);
+      setError("秘密の登録に失敗しました");
+    }
+  };
 
   return (
     <MobileShell>
@@ -60,15 +78,6 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
 
       {step === 1 ? (
         <div className="space-y-6">
-          <NeonField id="secret-title" label="秘密の見出し">
-            <NeonInput
-              id="secret-title"
-              value={title}
-              maxLength={60}
-              placeholder="見出しを入力"
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </NeonField>
           <NeonField id="secret-summary" label="秘密の概要">
             <NeonTextarea
               id="secret-summary"
@@ -145,14 +154,10 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
       ) : (
         <div className="space-y-5">
           <NeonCard className="p-5">
-            <p className="text-[10px] text-white/40">見出し</p>
-            <h2 className="mt-2 text-base leading-7 font-bold">{title}</h2>
-            <div className="mt-4">
-              <p className="text-[10px] text-white/40">概要</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">
-                {summary}
-              </p>
-            </div>
+            <p className="text-[10px] text-white/40">概要</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">
+              {summary}
+            </p>
             <div className="my-4 h-px bg-white/10" />
             <p className="text-[10px] text-white/40">本文</p>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">{body}</p>
@@ -171,13 +176,20 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
               </div>
             </div>
           </NeonCard>
+          {error ? (
+            <p role="alert" className="text-[13px] font-bold text-[#ffb4c9]">
+              {error}
+            </p>
+          ) : null}
           <div>
             <NeonButton
               size="lg"
               className="w-full"
-              onClick={() => router.push(`/groups/${groupId}/secrets`)}
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              onClick={handleRegister}
             >
-              登録する
+              {isSubmitting ? "登録中…" : "登録する"}
             </NeonButton>
           </div>
         </div>
