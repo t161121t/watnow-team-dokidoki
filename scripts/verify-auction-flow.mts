@@ -73,15 +73,31 @@ async function main() {
   }
   assert(assignedDealer === dealer, "dealerがランダム選抜される（テスト用にdealerロールを引くまでリトライ）");
 
+  // 2026-08-23レビュー反映: 前払い（P4）のcreditはlist_secret_for_auctionでは
+  // なくapprove_dealer_assignmentで行う（承認前に辞退が続き最終的に誰も
+  // 承認できないケースで、出品者に前払いだけ残ってしまうのを防ぐため。
+  // ユーザー報告で発覚。scripts/verify-auctions.mts・verify-secrets.mtsにも
+  // 同種の検証あり）。
   const sellerWalletAfterListing = await prisma.wallet.findUniqueOrThrow({
     where: { groupId_userId: { groupId, userId: seller } },
   });
-  assert(sellerWalletAfterListing.balance === 100, "list_secret_for_auction で前払い100が入る（P4）");
+  assert(
+    sellerWalletAfterListing.balance === 0,
+    "list_secret_for_auction では前払いはまだcreditされない",
+  );
 
   // ディーラー承認
   await withRlsContext(dealer, (tx) => tx.$executeRaw`SELECT approve_dealer_assignment(${auctionId}::uuid)`);
   const auctionAfterApproval = await prisma.auction.findUniqueOrThrow({ where: { id: auctionId } });
   assert(auctionAfterApproval.status === "open", "承認でopenになる");
+
+  const sellerWalletAfterApproval = await prisma.wallet.findUniqueOrThrow({
+    where: { groupId_userId: { groupId, userId: seller } },
+  });
+  assert(
+    sellerWalletAfterApproval.balance === 100,
+    `approve_dealer_assignment で前払い100が入る（P4、実際:${sellerWalletAfterApproval.balance}）`,
+  );
 
   // 入札: bidder2が130で先に入札、bidder1が150で上回る（place_bidは現在価格超えが必須のため昇順で入札）
   await withRlsContext(bidder2, (tx) => tx.$executeRaw`SELECT place_bid(${auctionId}::uuid, 130)`);
