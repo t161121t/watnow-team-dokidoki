@@ -28,7 +28,7 @@ export function SecretViewerScreen({
       </h2>
 
       <NeonCard className="overflow-hidden">
-        <div className="border-b border-white/10 bg-[#c038ff]/8 p-5">
+        <div className="border-b border-white/10 p-5">
           <p className="text-[10px] text-white/40">秘密の見出し</p>
           <h3 className="mt-2 text-lg leading-7 font-bold">{secret.summary}</h3>
         </div>
