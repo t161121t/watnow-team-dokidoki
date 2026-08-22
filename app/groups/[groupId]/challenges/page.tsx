@@ -1,4 +1,5 @@
 import { ChallengeScreen } from "@/features/challenges/components/challenge-screen";
+import { getMyGroupSummary } from "@/features/groups/actions";
 import { WalletBalance } from "@/features/wallet/components/wallet-balance";
 
 export default async function ChallengesPage({
@@ -6,9 +7,16 @@ export default async function ChallengesPage({
 }: PageProps<"/groups/[groupId]/challenges">) {
   const { groupId } = await params;
 
+  // 「作成」ボタンをadminにだけ出す判定（groupsドメイン、cross-domain）。
+  // ここでnull（未ログイン/非メンバー）でも、ChallengeScreen自身が
+  // 改めてログイン確認・グループ確認を行うためisAdmin=falseにするだけで
+  // 十分（作成ボタンが出ないだけで、実際のガードはChallengeScreen側）。
+  const group = await getMyGroupSummary({ groupId });
+
   return (
     <ChallengeScreen
       groupId={groupId}
+      isAdmin={group?.role === "admin"}
       balanceSection={
         <WalletBalance
           groupId={groupId}
