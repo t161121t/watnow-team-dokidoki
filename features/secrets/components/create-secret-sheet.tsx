@@ -3,20 +3,101 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { MobileShell } from "@/components/layout/mobile-shell";
-import { ScreenHeader } from "@/components/layout/screen-header";
+import {
+  BottomSheet,
+  BottomSheetBody,
+  BottomSheetClose,
+  BottomSheetContent,
+  BottomSheetHeader,
+  BottomSheetTitle,
+} from "@/components/ui/bottom-sheet";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonTextarea } from "@/components/ui/neon-field";
 import { StarRating } from "@/components/ui/star-rating";
 import { registerSecret } from "@/features/secrets/actions";
+import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { cn } from "@/lib/utils";
 import type { SecretCategory } from "@/lib/types/secret";
 
 const categories: SecretCategory[] = ["恋愛", "黒歴史", "趣味", "特技", "その他"];
 
-export function CreateSecretScreen({ groupId }: { groupId: string }) {
+/**
+ * 秘密の新規登録（⑦）のボトムシート。秘密リスト（⑬）の上に重ねて表示する。
+ *
+ * 開閉はURLクエリ（`?new=1`）駆動: 開くのは一覧側のLink（scroll={false}）、
+ * `open` propはpage.tsxがサーバー側で解釈した値。閉じるときはローカルstateで
+ * 即座に閉じつつ `router.replace` でクエリを剥がす（replaceなのでブラウザ
+ * バックで再度開くことはなく、逆に `?new=1` の履歴エントリからのバックでも
+ * 閉じられる）。深いリンク（直接 `?new=1` を開いた場合）でも `router.back()`
+ * と違ってアプリ外へ戻らない。
+ */
+export function CreateSecretSheet({
+  groupId,
+  tab,
+  open: openByUrl,
+}: {
+  groupId: string;
+  tab: SecretListTab;
+  open: boolean;
+}) {
   const router = useRouter();
+
+  // URL（サーバーprops）とローカルの開閉を同期する。閉じ操作はナビゲーション
+  // （RSC再描画）を待たずに即座にアニメーションさせたいのでローカルstateを持ち、
+  // propの変化はレンダー中のstate調整で反映する（React公式の
+  // "Adjusting some state when a prop changes" パターン）。
+  const [open, setOpen] = useState(openByUrl);
+  const [prevOpenByUrl, setPrevOpenByUrl] = useState(openByUrl);
+  if (prevOpenByUrl !== openByUrl) {
+    setPrevOpenByUrl(openByUrl);
+    setOpen(openByUrl);
+  }
+
+  const closeTo = (href: string) => {
+    setOpen(false);
+    router.replace(href, { scroll: false });
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      // 現在のタブを保ったまま一覧に戻る（スクロール位置も維持）
+      closeTo(`/groups/${groupId}/secrets?tab=${tab}`);
+    }
+  };
+
+  const handleComplete = () => {
+    // 旧 /secrets/new の完了処理（一覧のデフォルトタブへ遷移）を踏襲しつつ、
+    // 登録した秘密が「自分の秘密」に反映されるようrefreshする
+    closeTo(`/groups/${groupId}/secrets`);
+    router.refresh();
+  };
+
+  return (
+    <BottomSheet open={open} onOpenChange={handleOpenChange}>
+      <BottomSheetContent>
+        <BottomSheetHeader>
+          <BottomSheetTitle>秘密を登録</BottomSheetTitle>
+          <BottomSheetClose />
+        </BottomSheetHeader>
+        <BottomSheetBody>
+          {/* フォームはシートの中で完結させる（閉じるとアンマウントされ、
+              次に開いたとき初期状態から始まる） */}
+          <CreateSecretForm groupId={groupId} onComplete={handleComplete} />
+        </BottomSheetBody>
+      </BottomSheetContent>
+    </BottomSheet>
+  );
+}
+
+/** 2ステップ（入力 → 確認）の登録フォーム。旧CreateSecretScreenのロジックを温存。 */
+function CreateSecretForm({
+  groupId,
+  onComplete,
+}: {
+  groupId: string;
+  onComplete: () => void;
+}) {
   const [step, setStep] = useState<1 | 2>(1);
   const [summary, setSummary] = useState("");
   const [body, setBody] = useState("");
@@ -42,7 +123,7 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
         rarity,
         askingPrice: numericPrice,
       });
-      router.push(`/groups/${groupId}/secrets`);
+      onComplete();
     } catch {
       setIsSubmitting(false);
       setError("秘密の登録に失敗しました");
@@ -50,12 +131,7 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
   };
 
   return (
-    <MobileShell>
-      <ScreenHeader
-        title="秘密を登録"
-        backHref={`/groups/${groupId}/secrets`}
-      />
-
+    <>
       <ol className="mb-7 flex items-center justify-center" aria-label="登録ステップ">
         {[1, 2].map((item) => (
           <li key={item} className="flex items-center last:flex-none">
@@ -194,6 +270,6 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
           </div>
         </div>
       )}
-    </MobileShell>
+    </>
   );
 }
