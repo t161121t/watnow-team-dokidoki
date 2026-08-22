@@ -200,6 +200,30 @@ async function main() {
     "my_secret_collection_view: 落札者は落札した秘密が見える（winner分岐）",
   );
 
+  // --- getCollectionItem相当（features/secrets/server/get-collection-item.ts） ---
+  // my_secret_collection_viewには無い落札価格・出品者名を、auctions/usersから
+  // 追加で合成する（秘密ビューワー⑫用）。
+  const collectionItem = await withRlsContext(bidder, async (tx) => {
+    const rows = await tx.$queryRaw<{ auction_id: string; seller_id: string }[]>`
+      SELECT * FROM my_secret_collection_view
+      WHERE group_id = ${groupId}::uuid AND secret_id = ${item.secret_id}::uuid
+    `;
+    const row = rows[0];
+    const [auction, sellerUser] = await Promise.all([
+      tx.auction.findUnique({ where: { id: row.auction_id }, select: { finalPrice: true } }),
+      tx.user.findUnique({ where: { id: row.seller_id }, select: { nickname: true } }),
+    ]);
+    return { finalPrice: auction?.finalPrice, sellerNickname: sellerUser?.nickname };
+  });
+  assert(
+    collectionItem.finalPrice === finalAuction.finalPrice,
+    "getCollectionItem相当: 落札価格(auctions.final_price)が取得できる",
+  );
+  assert(
+    typeof collectionItem.sellerNickname === "string" && collectionItem.sellerNickname.length > 0,
+    "getCollectionItem相当: 出品者のnicknameが取得できる",
+  );
+
   const dealerCollection = await withRlsContext(dealer, (tx) =>
     tx.$queryRaw<{ secret_id: string }[]>`SELECT * FROM my_secret_collection_view WHERE group_id = ${groupId}::uuid`,
   );

@@ -5,9 +5,19 @@ import { BackButton } from "@/components/ui/back-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
 import { getGroupNavigation } from "@/lib/navigation";
-import type { Secret } from "@/lib/types/secret";
 
-export function SecretViewerScreen({ secret }: { secret: Secret }) {
+export type CollectionSecret = {
+  groupId: string;
+  summary: string;
+  body: string;
+  category: string;
+  rarity: number;
+  ownerName: string;
+  finalPrice: number | null;
+  grantedAtLabel: string | null;
+};
+
+export function SecretViewerScreen({ secret }: { secret: CollectionSecret }) {
   return (
     <MobileShell withNavigation>
       <ScreenHeader
@@ -49,11 +59,13 @@ export function SecretViewerScreen({ secret }: { secret: Secret }) {
         </div>
         <div>
           <p className="text-white/38">登録日</p>
-          <p className="mt-1 font-bold">8月10日</p>
+          <p className="mt-1 font-bold">{secret.grantedAtLabel ?? "-"}</p>
         </div>
         <div>
           <p className="text-white/38">落札価格</p>
-          <p className="mt-1 font-bold">{secret.soldPrice ?? secret.value}pt</p>
+          <p className="mt-1 font-bold">
+            {secret.finalPrice !== null ? `${secret.finalPrice.toLocaleString()}pt` : "-"}
+          </p>
         </div>
       </NeonCard>
 

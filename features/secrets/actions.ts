@@ -7,6 +7,7 @@ import { updateSecretBeforeListing as updateSecretBeforeListingInDb } from "@/fe
 import { deleteSecretBeforeListing as deleteSecretBeforeListingInDb } from "@/features/secrets/server/delete-secret-before-listing";
 import { listSecretForAuction as listSecretForAuctionInDb } from "@/features/secrets/server/list-secret-for-auction";
 import { getMySecretCollection as getMySecretCollectionInDb } from "@/features/secrets/server/get-my-secret-collection";
+import { getCollectionItem as getCollectionItemInDb } from "@/features/secrets/server/get-collection-item";
 
 function requireUserId(userId: string | null): asserts userId is string {
   if (!userId) {
@@ -113,4 +114,18 @@ export async function getMySecretCollection(input: { groupId?: string } = {}) {
 
   const parsed = getMySecretCollectionSchema.parse(input);
   return getMySecretCollectionInDb(userId, parsed.groupId);
+}
+
+const collectionItemSchema = z.object({
+  groupId: z.string().uuid(),
+  secretId: z.string().uuid(),
+});
+
+/** 秘密ビューワー（⑫、落札後）用。落札価格・出品者名を合わせて1件返す。 */
+export async function getCollectionItem(input: { groupId: string; secretId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = collectionItemSchema.parse(input);
+  return getCollectionItemInDb(userId, parsed.groupId, parsed.secretId);
 }

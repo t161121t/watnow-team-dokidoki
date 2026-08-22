@@ -10,6 +10,7 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonTextarea } from "@/components/ui/neon-field";
 import { StarRating } from "@/components/ui/star-rating";
+import { registerSecret } from "@/features/secrets/actions";
 import { cn } from "@/lib/utils";
 import type { SecretCategory } from "@/lib/types/secret";
 
@@ -23,7 +24,28 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
   const [category, setCategory] = useState<SecretCategory>("黒歴史");
   const [rarity, setRarity] = useState<1 | 2 | 3 | 4 | 5>(3);
   const [value, setValue] = useState(200);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const canContinue = summary.trim().length > 0 && body.trim().length > 0;
+
+  const handleRegister = async () => {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await registerSecret({
+        groupId,
+        body,
+        summary,
+        category,
+        rarity,
+        askingPrice: value,
+      });
+      router.push(`/groups/${groupId}/secrets`);
+    } catch {
+      setIsSubmitting(false);
+      setError("秘密の登録に失敗しました");
+    }
+  };
 
   return (
     <MobileShell>
@@ -148,6 +170,11 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
               </div>
             </div>
           </NeonCard>
+          {error ? (
+            <p role="alert" className="text-[13px] font-bold text-[#ffb4c9]">
+              {error}
+            </p>
+          ) : null}
           <div className="grid grid-cols-[0.7fr_1.3fr] gap-3">
             <BackButton
               onClick={() => setStep(1)}
@@ -156,9 +183,11 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
             />
             <NeonButton
               size="lg"
-              onClick={() => router.push(`/groups/${groupId}/secrets`)}
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              onClick={handleRegister}
             >
-              登録する
+              {isSubmitting ? "登録中…" : "登録する"}
             </NeonButton>
           </div>
         </div>
