@@ -50,8 +50,15 @@ export function GroupManageScreen({
 
       <section className="mt-7 space-y-4">
         <h2 className="text-lg font-bold">メンバーを招待</h2>
-        <NeonField id="member-search" label="ニックネーム・メールで検索">
-          <NeonInput id="member-search" placeholder="名前またはメールアドレス" />
+        <NeonField id="member-search" label="ニックネームで検索">
+          <NeonInput id="member-search" placeholder="ニックネームを入力" />
+        </NeonField>
+        <NeonField id="member-select" label="ユーザーを選択">
+          <NeonSelect id="member-select" defaultValue="">
+            <option value="" disabled>
+              検索結果から選択
+            </option>
+          </NeonSelect>
         </NeonField>
         <MockActionButton className="w-full" feedback="招待を送信しました">
           招待を送る
@@ -63,11 +70,13 @@ export function GroupManageScreen({
         <NeonField id="manage-group-name" label="グループ名">
           <NeonInput id="manage-group-name" defaultValue={group.name} />
         </NeonField>
-        <NeonField id="auction-time" label="定例オークション">
-          <NeonSelect id="auction-time" defaultValue="friday-22">
-            <option value="friday-22">毎週金曜 22:00</option>
-            <option value="sunday-21">毎週日曜 21:00</option>
-            <option value="manual">手動で開催</option>
+        <NeonField id="auction-open-seconds" label="オークション開放時間">
+          <NeonSelect id="auction-open-seconds" defaultValue="86400">
+            <option value="3600">1時間</option>
+            <option value="21600">6時間</option>
+            <option value="43200">12時間</option>
+            <option value="86400">24時間</option>
+            <option value="172800">48時間</option>
           </NeonSelect>
         </NeonField>
         <MockActionButton className="w-full" feedback="変更を保存しました">

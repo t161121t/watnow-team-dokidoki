@@ -1,8 +1,8 @@
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
+import { BackButton } from "@/components/ui/back-button";
 import { NeonCard } from "@/components/ui/neon-card";
-import { NeonLink } from "@/components/ui/neon-button";
 import { StarRating } from "@/components/ui/star-rating";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Secret } from "@/lib/types/secret";
@@ -57,13 +57,11 @@ export function SecretViewerScreen({ secret }: { secret: Secret }) {
         </div>
       </NeonCard>
 
-      <NeonLink
+      <BackButton
         href={`/groups/${secret.groupId}/secrets`}
-        size="lg"
-        className="mt-6 w-full"
-      >
-        秘密リストへ戻る
-      </NeonLink>
+        aria-label="秘密リストへ戻る"
+        className="mx-auto mt-6"
+      />
       <BottomNavigation items={getGroupNavigation(secret.groupId)} active="secrets" />
     </MobileShell>
   );

@@ -63,12 +63,6 @@ export function ProfileScreen({
       <section className="mt-7">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">落札コレクション</h2>
-          <Link
-            href={`/groups/${group.id}/secrets`}
-            className="text-xs font-bold text-[#e491ff]"
-          >
-            一覧
-          </Link>
         </div>
         {collection.map((secret) => (
           <Link
