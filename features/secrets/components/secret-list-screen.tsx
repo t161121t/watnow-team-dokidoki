@@ -6,13 +6,19 @@ import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonLink } from "@/components/ui/neon-button";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { SecretCard } from "@/features/secrets/components/secret-card";
 import { getGroupNavigation } from "@/lib/navigation";
-import { cn } from "@/lib/utils";
 import type { Group } from "@/lib/types/group";
 import type { Secret } from "@/lib/types/secret";
 
 type Tab = "mine" | "dealer" | "collection";
+
+const tabs = [
+  { value: "mine", label: "自分の秘密" },
+  { value: "dealer", label: "ディーラー" },
+  { value: "collection", label: "落札済み" },
+] as const;
 
 export function SecretListScreen({
   group,
@@ -43,29 +49,13 @@ export function SecretListScreen({
         }
       />
 
-      <div className="mb-6 grid grid-cols-3 rounded-full border border-[#c038ff]/55 bg-black/65 p-1 shadow-[0_0_13px_rgba(192,56,255,0.28)]">
-        {(
-          [
-            ["mine", "自分の秘密"],
-            ["dealer", "ディーラー"],
-            ["collection", "落札済み"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={tab === value}
-            className={cn(
-              "min-h-9 rounded-full px-1 text-[10px] font-bold text-white/45 transition",
-              tab === value &&
-                "bg-[#c038ff]/22 text-white shadow-[0_0_12px_rgba(192,56,255,0.58)]",
-            )}
-            onClick={() => setTab(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        tabs={tabs}
+        value={tab}
+        onValueChange={setTab}
+        label="秘密リストの表示切り替え"
+        className="mb-6"
+      />
 
       {visibleSecrets.length > 0 ? (
         <div className="space-y-4">
