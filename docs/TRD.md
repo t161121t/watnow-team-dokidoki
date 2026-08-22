@@ -80,8 +80,8 @@
 
 | 項目 | MVP | 備考 |
 | --- | --- | --- |
-| Supabase Auth | ✅ | Email / Magic Link / OAuth（Google 等）を技術的に許容 |
-| どの provider を本番でオンにするか | **Magic Link を実装済み**（2026-08-18、`features/auth/`） | Google OAuth 等の追加は `signInWithOAuth` を後から足すだけで済むため、他方式は必要になってから追加する。詳細は `docs/技術選定.md` |
+| Supabase Auth | ✅ | Email / Password / OAuth（Google 等）を技術的に許容 |
+| どの provider を本番でオンにするか | **Google OAuth・メールアドレス+パスワードを実装済み**（Google: 2026-08-18導入、メール+パスワード: issue #76、2026-08-22。`features/auth/`） | 当初実装したMagic Linkはissue #76実装時、UIに導線が無いため削除した（2026-08-22）。詳細は `docs/技術選定.md` |
 | プロフィール（ニックネーム・アイコン） | ✅ | `users` 等で Auth ユーザーに紐づけ |
 
 セッションは Supabase クライアントの標準フローに従う。
@@ -236,7 +236,7 @@
 | T2 | 落札確定の時計（`pg_cron` 間隔、クライアント表示とのズレ） | 技術選定 §5 |
 | ~~T3~~ | ~~無料 AI の具体プロバイダとフォールバック~~ → **解消**。AI validation 自体を MVP 対象外に確定（DB-4）したため不要 | PRD §6 P10 |
 | T4 | ミニゲーム「器」のテーブル粒度（中身未定のままどこまで作るか） | PRD B5 |
-| ~~T5~~ | ~~本番で有効化する Auth provider の確定~~ → **解決済み（2026-08-18）**。Magic Linkを実装（§4） | §4 |
+| ~~T5~~ | ~~本番で有効化する Auth provider の確定~~ → **解決済み（2026-08-18）**。Magic Linkを実装（§4） → **2026-08-22、Google OAuth・メール+パスワードに切り替え**（UIに導線がないMagic Linkは削除。issue #76） | §4 |
 | ~~T6~~ | ~~入札一覧の匿名化を DB でやるか API でやるか~~ → **解決済み**。DB層のview（`bidder_identified_view` / `anonymous_bid_feed_view`）で対応（`prisma/sql/auctions/002_views.sql`） | 情報非対称 |
 
 ---

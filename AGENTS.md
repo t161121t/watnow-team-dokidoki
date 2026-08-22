@@ -98,7 +98,7 @@
 | `npm run db:check` | `DATABASE_URL` への疎通確認のみ実行 |
 | `npm run db:sql` | `prisma/sql/**/*.sql`（PostgreSQL Functions・RLSポリシー）を適用 |
 | `npm run db:setup` | `prisma migrate deploy` + `db:sql` をまとめて実行 |
-| `npm run verify:auth` | `create_profile` RPCが実DBで正しく動くかを検証（Magic Linkのメール往復は対象外） |
+| `npm run verify:auth` | `create_profile` RPCが実DBで正しく動くかを検証（メールリンク経由のメール往復は対象外） |
 | `npm run verify:storage` | `avatars`バケットのRLSが実DBで正しく効くかを検証（実際のアップロードAPI呼び出しは対象外） |
 | `npm run verify:groups` | groupsドメインのRPC（search_users/decline_invite/leave_group等・最後のadminガード）を実DBで検証 |
 | `npm run verify:secrets` | secretsドメインのRPC・View（register_secret/list_secret_for_auction/my_secret_collection_view等）を実DBで検証 |

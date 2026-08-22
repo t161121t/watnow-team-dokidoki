@@ -3,10 +3,11 @@ import { exchangeCodeForSession } from "@/features/auth/actions";
 import { getMyGroups } from "@/features/groups/actions";
 
 /**
- * Magic LinkメールのリンクとGoogle OAuthの両方の遷移先。`code`をセッションに
- * 交換する（exchangeCodeForSessionが初回ログイン時のプロフィール自動作成も
- * 行う）。`redirect_to`は`features/auth/actions.ts`の`signInWithMagicLink`/
- * `signInWithGoogle`が明示的に指定された場合のみ付与される（通常は未指定）。
+ * Google OAuthと、メールアドレス・パスワード新規登録時の確認メールリンクの
+ * 両方の遷移先。`code`をセッションに交換する（exchangeCodeForSessionが初回
+ * ログイン時のプロフィール自動作成も行う）。`redirect_to`は
+ * `features/auth/actions.ts`の`signInWithGoogle`/`signUpWithPassword`が
+ * 明示的に指定された場合のみ付与される（通常は未指定）。
  *
  * `redirect_to`が無い場合は、本人の所属groupを見て遷移先を決める
  * （docs/画面.md §2: 所属ありならホーム画面⑥、未所属なら参加/作成
