@@ -11,3 +11,13 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const signupSchema = loginSchema.extend({
+  nickname: z
+    .string()
+    .trim()
+    .min(1, { error: "ニックネームを入力してください" })
+    .max(20, { error: "ニックネームは20文字以内で入力してください" }),
+});
+
+export type SignupInput = z.infer<typeof signupSchema>;

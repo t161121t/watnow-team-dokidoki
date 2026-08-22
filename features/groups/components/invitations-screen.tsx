@@ -7,12 +7,14 @@ import type { GroupInvitation } from "@/lib/types/group";
 
 export function InvitationsScreen({
   invitations,
+  backHref = "/groups",
 }: {
   invitations: GroupInvitation[];
+  backHref?: string;
 }) {
   return (
     <MobileShell>
-      <ScreenHeader title="グループ招待" backHref="/groups" />
+      <ScreenHeader title="グループ招待" backHref={backHref} />
       <p className="-mt-3 mb-6 text-sm text-white/55">
         {invitations.length}件の招待が届いています
       </p>
