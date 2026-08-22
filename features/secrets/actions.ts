@@ -114,3 +114,4 @@ export async function getMySecretCollection(input: { groupId?: string } = {}) {
   const parsed = getMySecretCollectionSchema.parse(input);
   return getMySecretCollectionInDb(userId, parsed.groupId);
 }
+

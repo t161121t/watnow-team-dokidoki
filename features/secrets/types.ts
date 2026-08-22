@@ -77,3 +77,20 @@ export type MySecretCollectionRow = {
   seller_id: string;
   granted_at: Date | null;
 };
+
+/**
+ * 秘密リスト（⑬）カード表示用の共通UI型。owner/dealer/winnerいずれの
+ * タブも、由来（secret_group_items / auction_public_view /
+ * my_secret_collection_view）が異なるためこの形に正規化してから渡す
+ * （issue #71系のグループ管理画面接続と同じ「UI型はページ側で組み立てる」方針）。
+ */
+export type SecretListItem = {
+  id: string;
+  groupId: string;
+  viewRole: "owner" | "dealer" | "winner";
+  summary: string;
+  category: string;
+  rarity: number;
+  value: number;
+  badgeLabel?: string;
+};

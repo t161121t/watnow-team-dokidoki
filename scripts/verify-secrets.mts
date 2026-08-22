@@ -232,6 +232,66 @@ async function main() {
     "my_secret_collection_view: ディーラーは出品者でも落札者でもないので見えない",
   );
 
+  // --- listMySecrets相当（features/secrets/server/list-my-secrets.ts） ---
+  const myItems = await withRlsContext(seller, (tx) =>
+    tx.secretGroupItem.findMany({
+      where: { groupId, secret: { ownerId: seller } },
+      include: { secret: true },
+    }),
+  );
+  assert(
+    myItems.some((row) => row.id === item.id && row.secret.summary === "original summary"),
+    "listMySecrets相当: 自分のsecret_group_itemsがsecrets結合込みで取れる",
+  );
+  const dealerItems = await withRlsContext(dealer, (tx) =>
+    tx.secretGroupItem.findMany({ where: { groupId, secret: { ownerId: dealer } } }),
+  );
+  assert(dealerItems.length === 0, "listMySecrets相当: 自分が出品していなければ0件");
+
+  // --- getMySecretItem相当（features/secrets/server/get-my-secret-item.ts） ---
+  const ownItem = await withRlsContext(seller, (tx) =>
+    tx.secretGroupItem.findFirst({
+      where: { id: item.id, secret: { ownerId: seller } },
+      include: { secret: true },
+    }),
+  );
+  assert(ownItem?.id === item.id, "getMySecretItem相当: 本人は自分のitemを1件取得できる");
+  const notOwnItem = await withRlsContext(dealer, (tx) =>
+    tx.secretGroupItem.findFirst({
+      where: { id: item.id, secret: { ownerId: dealer } },
+      include: { secret: true },
+    }),
+  );
+  assert(notOwnItem === null, "getMySecretItem相当: 他人のitemはnullになる（owner詐称防止）");
+
+  // --- listMyWinnings相当（features/secrets/server/list-my-winnings.ts） ---
+  const winningsForBidder = await withRlsContext(bidder, async (tx) => {
+    const rows = await tx.$queryRaw<{ auction_id: string; secret_id: string; seller_id: string }[]>`
+      SELECT * FROM my_secret_collection_view WHERE group_id = ${groupId}::uuid
+    `;
+    const winnings = rows.filter((r) => r.seller_id !== bidder);
+    const auctions = await tx.auction.findMany({
+      where: { id: { in: winnings.map((r) => r.auction_id) } },
+      select: { id: true, finalPrice: true },
+    });
+    const priceById = new Map(auctions.map((a) => [a.id, a.finalPrice]));
+    return winnings.map((r) => ({ ...r, final_price: priceById.get(r.auction_id) ?? null }));
+  });
+  assert(
+    winningsForBidder.some((r) => r.secret_id === item.secret_id && r.final_price === finalAuction.finalPrice),
+    "listMyWinnings相当: 落札者にはfinal_priceを補ったwinner行が返る",
+  );
+  const winningsForSeller = await withRlsContext(seller, async (tx) => {
+    const rows = await tx.$queryRaw<{ seller_id: string }[]>`
+      SELECT * FROM my_secret_collection_view WHERE group_id = ${groupId}::uuid
+    `;
+    return rows.filter((r) => r.seller_id !== seller);
+  });
+  assert(
+    winningsForSeller.length === 0,
+    "listMyWinnings相当: 自分が出品した行（seller_id=自分）はwinner行から除外される",
+  );
+
   // --- users_select_auction_counterparty（prisma/sql/secrets/005_collection_history_policy.sql） ---
   // 出品者がグループを脱退した後も、落札者からその出品者のnicknameが引き続き
   // 取得できることを確認する（2026-08-22レビュー指摘。以前はusers_select_

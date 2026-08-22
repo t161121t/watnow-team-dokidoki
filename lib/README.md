@@ -12,6 +12,7 @@
 | `lib/avatar.ts` | ユーザー/グループアイコンの表示用ヘルパー（イニシャル抽出・userId由来の決定的な色割り当て・avatarsバケットの公開URL組み立て）。ドメイン固有ロジックではなく汎用の表示ロジックのため、ここに置く | `app/*`・`components/*`・`features/*` |
 | `lib/types/*` | UIとデータ取得元の境界で共有するドメイン型 | `app/*`・`components/*`・`features/*` |
 | `lib/mocks/*` | UI表示と画面遷移確認用のTypeScript Mockデータ。実API・DB接続は持たない | `app/*` |
+| `lib/date.ts` | UIの簡易日付/時刻ラベル表示用ヘルパー（ドメイン非依存の汎用フォーマッタ） | `app/*`・`components/*`・`features/*` |
 
 ## 禁止事項
 

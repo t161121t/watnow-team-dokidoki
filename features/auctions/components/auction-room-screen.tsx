@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
@@ -8,52 +10,135 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
+import { getAnonymousBidFeed, getAuction, placeBid } from "@/features/auctions/actions";
+import { useAuctionRealtime } from "@/features/auctions/components/use-auction-realtime";
+import { formatRemainingLabel } from "@/features/auctions/format";
+import type { AuctionStatus } from "@/features/auctions/types";
 import { getGroupNavigation } from "@/lib/navigation";
-import type { Auction } from "@/lib/types/auction";
-import type { Group } from "@/lib/types/group";
+
+export type RoomAuction = {
+  id: string;
+  groupId: string;
+  summary: string;
+  category: string;
+  rarity: number;
+  status: AuctionStatus;
+  currentPrice: number;
+  endsAt: Date | null;
+};
+
+export type AnonymousBid = { amount: number; rank: number };
+
+const BID_STEP = 20;
 
 export function AuctionRoomScreen({
-  group,
   auction,
+  initialBidFeed,
+  balanceSection,
 }: {
-  group: Group;
-  auction: Auction;
+  auction: RoomAuction;
+  initialBidFeed: AnonymousBid[];
+  balanceSection: ReactNode;
 }) {
+  const router = useRouter();
   const [currentPrice, setCurrentPrice] = useState(auction.currentPrice);
-  const [amount, setAmount] = useState(auction.minimumBid);
-  const [bidCount, setBidCount] = useState(auction.bidCount);
+  const [status, setStatus] = useState<AuctionStatus>(auction.status);
+  const [endsAt, setEndsAt] = useState<Date | null>(auction.endsAt);
+  const [bidFeed, setBidFeed] = useState<AnonymousBid[]>(initialBidFeed);
+  const [amount, setAmount] = useState(auction.currentPrice + BID_STEP);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  const step = 20;
-  const minimum = useMemo(() => currentPrice + step, [currentPrice]);
+  const [remainingLabel, setRemainingLabel] = useState(() =>
+    formatRemainingLabel(auction.endsAt, auction.status),
+  );
+
+  // 現在価格が動いたら入札額の初期値もそれに追随させる（自分の入札直後・
+  // 他人の入札のrealtime反映の両方をカバー）。レンダー中に直接調整する
+  // Reactの推奨パターン（useEffectでのsetStateはcascading renderを招くため
+  // react-hooks/set-state-in-effectで禁止されている）。
+  const [priceForAmountSync, setPriceForAmountSync] = useState(currentPrice);
+  if (currentPrice !== priceForAmountSync) {
+    setPriceForAmountSync(currentPrice);
+    setAmount(currentPrice + BID_STEP);
+  }
+
+  // 残り時間はendsAt/statusが変わらなくても1秒ごとに表示だけ更新する。
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setRemainingLabel(formatRemainingLabel(endsAt, status));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [endsAt, status]);
 
   useEffect(() => {
     if (!message) return;
-    const timer = window.setTimeout(() => setMessage(""), 2000);
+    const timer = window.setTimeout(() => setMessage(""), 2500);
     return () => window.clearTimeout(timer);
   }, [message]);
 
-  const submitBid = () => {
-    if (amount > group.balance) {
-      setMessage("ポイントが不足しています");
-      return;
+  const refreshBidFeed = async () => {
+    try {
+      const rows = await getAnonymousBidFeed({ auctionId: auction.id });
+      setBidFeed(rows.map((row) => ({ amount: row.amount, rank: Number(row.rank) })));
+    } catch {
+      // 入札フィードの再取得失敗は致命的ではないため無視する（価格自体はrealtimeで更新済み）
     }
-    setCurrentPrice(amount);
-    setBidCount((count) => count + 1);
-    setAmount(amount + step);
-    setMessage(`${amount.toLocaleString()}ptで入札しました`);
+  };
+
+  const isSubscribedOnceRef = useRef(false);
+  useAuctionRealtime(
+    auction.groupId,
+    auction.id,
+    (row) => {
+      setCurrentPrice(row.current_price);
+      setStatus(row.status as AuctionStatus);
+      setEndsAt(row.ends_at ? new Date(row.ends_at) : null);
+      void refreshBidFeed();
+      router.refresh(); // 残高（balanceSection）を最新化する
+    },
+    (subscribeStatus) => {
+      // 初回接続の取りこぼし対策（use-auction-realtime.tsの利用契約）。
+      // 購読成立前に入った更新を拾うため、SUBSCRIBED時に1度だけ最新値を取り直す。
+      if (subscribeStatus === "SUBSCRIBED" && !isSubscribedOnceRef.current) {
+        isSubscribedOnceRef.current = true;
+        void (async () => {
+          const fresh = await getAuction({ auctionId: auction.id });
+          if (fresh) {
+            setCurrentPrice(fresh.current_price);
+            setStatus(fresh.status);
+            setEndsAt(fresh.ends_at ? new Date(fresh.ends_at) : null);
+          }
+          void refreshBidFeed();
+        })();
+      }
+    },
+  );
+
+  const canBid = status === "open";
+
+  const submitBid = async () => {
+    setMessage("");
+    setIsSubmitting(true);
+    try {
+      await placeBid({ auctionId: auction.id, amount });
+      setMessage(`${amount.toLocaleString()}ptで入札しました`);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "入札に失敗しました");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <MobileShell withNavigation>
       <ScreenHeader
         title="オークション会場"
-        backHref={`/groups/${group.id}/auctions`}
+        backHref={`/groups/${auction.groupId}/auctions`}
       />
 
       <div className="mb-4 text-right">
-        <span className="text-xs font-bold text-[#e591ff]">
-          {auction.remainingLabel}
-        </span>
+        <span className="text-xs font-bold text-[#e591ff]">{remainingLabel}</span>
       </div>
 
       <NeonCard className="p-5">
@@ -66,11 +151,7 @@ export function AuctionRoomScreen({
           </div>
           <div>
             <p className="text-white/40">レア度</p>
-            <StarRating
-              value={auction.rarity}
-              label="レア度"
-              className="mt-1.5"
-            />
+            <StarRating value={auction.rarity} label="レア度" className="mt-1.5" />
           </div>
         </div>
       </NeonCard>
@@ -84,44 +165,72 @@ export function AuctionRoomScreen({
               <span className="ml-1 text-sm text-white/50">pt</span>
             </p>
           </div>
-          <p className="text-xs text-white/45">入札 {bidCount}件</p>
+          <p className="text-xs text-white/45">入札 {bidFeed.length}件</p>
         </div>
       </NeonCard>
 
-      <div className="mt-7">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-bold">入札ポイント</p>
-          <p className="text-[11px] text-white/45">
-            所持 {group.balance.toLocaleString()}pt
-          </p>
+      {bidFeed.length > 0 ? (
+        <div className="mt-3 space-y-1.5">
+          {bidFeed.slice(0, 5).map((bid, index) => (
+            <div
+              key={`${bid.rank}-${index}`}
+              className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs"
+            >
+              <span className="text-white/45">{bid.rank}位</span>
+              <span className="font-bold">{bid.amount.toLocaleString()}pt</span>
+            </div>
+          ))}
         </div>
-        <div className="flex items-center justify-between rounded-[28px] border-2 border-[#c038ff] bg-black/75 p-2 shadow-[0_0_16px_2px_rgba(192,56,255,0.62)]">
+      ) : null}
+
+      {canBid ? (
+        <div className="mt-7">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-bold">入札ポイント</p>
+            <div className="text-[11px] text-white/45">所持 {balanceSection}</div>
+          </div>
+          <div className="flex items-center justify-between rounded-[28px] border-2 border-[#c038ff] bg-black/75 p-2 shadow-[0_0_16px_2px_rgba(192,56,255,0.62)]">
+            <NeonButton
+              variant="quiet"
+              size="icon"
+              aria-label="入札額を下げる"
+              disabled={amount <= currentPrice + BID_STEP}
+              onClick={() =>
+                setAmount((value) => Math.max(currentPrice + BID_STEP, value - BID_STEP))
+              }
+            >
+              −
+            </NeonButton>
+            <p className="text-xl font-black">
+              {amount.toLocaleString()}
+              <span className="ml-1 text-xs text-white/45">pt</span>
+            </p>
+            <NeonButton
+              variant="quiet"
+              size="icon"
+              aria-label="入札額を上げる"
+              onClick={() => setAmount((value) => value + BID_STEP)}
+            >
+              ＋
+            </NeonButton>
+          </div>
           <NeonButton
-            variant="quiet"
-            size="icon"
-            aria-label="入札額を下げる"
-            disabled={amount <= minimum}
-            onClick={() => setAmount((value) => Math.max(minimum, value - step))}
+            size="lg"
+            className="mt-4 w-full"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={submitBid}
           >
-            −
-          </NeonButton>
-          <p className="text-xl font-black">
-            {amount.toLocaleString()}
-            <span className="ml-1 text-xs text-white/45">pt</span>
-          </p>
-          <NeonButton
-            variant="quiet"
-            size="icon"
-            aria-label="入札額を上げる"
-            onClick={() => setAmount((value) => value + step)}
-          >
-            ＋
+            {isSubmitting ? "送信中…" : "この金額で入札する"}
           </NeonButton>
         </div>
-        <NeonButton size="lg" className="mt-4 w-full" onClick={submitBid}>
-          この金額で入札する
-        </NeonButton>
-      </div>
+      ) : (
+        <p className="mt-7 text-center text-sm text-white/55">
+          {status === "pending_dealer_approval"
+            ? "ディーラーの承認待ちです"
+            : "このオークションは入札を受け付けていません"}
+        </p>
+      )}
 
       {message ? (
         <div
@@ -131,7 +240,7 @@ export function AuctionRoomScreen({
           {message}
         </div>
       ) : null}
-      <BottomNavigation items={getGroupNavigation(group.id)} active="auctions" />
+      <BottomNavigation items={getGroupNavigation(auction.groupId)} active="auctions" />
     </MobileShell>
   );
 }
