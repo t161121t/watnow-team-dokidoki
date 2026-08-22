@@ -7,6 +7,7 @@ import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonCard } from "@/components/ui/neon-card";
+import { NeonLink } from "@/components/ui/neon-button";
 import type { ChallengeListTab } from "@/features/challenges/challenge-list-tab";
 import { ChallengeApprovalPanel } from "@/features/challenges/components/challenge-approval-panel";
 import { ChallengeCard } from "@/features/challenges/components/challenge-card";
@@ -40,10 +41,12 @@ export async function ChallengeScreen({
   groupId,
   balanceSection,
   tab,
+  isAdmin,
 }: {
   groupId: string;
   balanceSection: ReactNode;
   tab: ChallengeListTab;
+  isAdmin: boolean;
 }) {
   if (!z.string().uuid().safeParse(groupId).success) {
     notFound();
@@ -57,6 +60,12 @@ export async function ChallengeScreen({
         : `/groups/${groupId}/challenges`;
     redirect(`/login?redirect_to=${encodeURIComponent(returnPath)}`);
   }
+
+  const createAction = isAdmin ? (
+    <NeonLink href={`/groups/${groupId}/challenges/new`} variant="secondary" size="sm">
+      作成
+    </NeonLink>
+  ) : null;
 
   const tabNav = (
     <div className="mb-6 grid grid-cols-2 rounded-full border border-[#c038ff]/55 bg-black/65 p-1 shadow-[0_0_13px_rgba(192,56,255,0.28)]">
@@ -91,7 +100,7 @@ export async function ChallengeScreen({
   if (tab === "review") {
     return (
       <MobileShell withNavigation>
-        <ScreenHeader title="チャレンジ" />
+        <ScreenHeader title="チャレンジ" action={createAction} />
         {tabNav}
         <ChallengeApprovalPanel groupId={groupId} userId={userId} />
         <BottomNavigation items={getGroupNavigation(groupId)} active="challenges" />
@@ -139,7 +148,7 @@ export async function ChallengeScreen({
 
   return (
     <MobileShell withNavigation>
-      <ScreenHeader title="チャレンジ" />
+      <ScreenHeader title="チャレンジ" action={createAction} />
       {tabNav}
       <NeonCard className="mb-7 p-5">
         <p className="text-xs font-bold text-white/45">現在のポイント</p>
