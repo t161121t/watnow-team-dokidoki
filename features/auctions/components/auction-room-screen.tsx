@@ -43,7 +43,7 @@ export type RoomAuction = {
 
 export type AnonymousBid = { amount: number; rank: number };
 
-const BID_STEP = 20;
+const BID_STEP = 1;
 
 export function AuctionRoomScreen({
   auction,

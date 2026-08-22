@@ -35,7 +35,7 @@ export function toAuction(row: AuctionPublicViewRow, isLeading: boolean): Auctio
     category: row.category,
     rarity: row.rarity as 1 | 2 | 3 | 4 | 5,
     currentPrice: row.current_price,
-    minimumBid: row.current_price + 20,
+    minimumBid: row.current_price + 1,
     bidCount: Number(row.bid_count),
     remainingLabel: formatRemainingLabel(row.ends_at, row.status),
     isLeading,
