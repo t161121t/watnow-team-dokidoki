@@ -7,6 +7,7 @@ import { updateSecretBeforeListing as updateSecretBeforeListingInDb } from "@/fe
 import { deleteSecretBeforeListing as deleteSecretBeforeListingInDb } from "@/features/secrets/server/delete-secret-before-listing";
 import { listSecretForAuction as listSecretForAuctionInDb } from "@/features/secrets/server/list-secret-for-auction";
 import { getMySecretCollection as getMySecretCollectionInDb } from "@/features/secrets/server/get-my-secret-collection";
+import { listMyWinnings as listMyWinningsInDb } from "@/features/secrets/server/list-my-winnings";
 
 function requireUserId(userId: string | null): asserts userId is string {
   if (!userId) {
@@ -113,5 +114,21 @@ export async function getMySecretCollection(input: { groupId?: string } = {}) {
 
   const parsed = getMySecretCollectionSchema.parse(input);
   return getMySecretCollectionInDb(userId, parsed.groupId);
+}
+
+const listMyWinningsSchema = z.object({ groupId: z.string().uuid() });
+
+/**
+ * マイページ（⑭）の「落札コレクション」。secretsドメインの読み取りは
+ * app/groups/[groupId]/me/page.tsxからここを経由して取得する（usersドメインの
+ * ProfileScreenから見るとcross-domainのread。features/auctions/actionsの
+ * getMyDealerAuctionsと同じ理由）。
+ */
+export async function listMyWinnings(input: { groupId: string }) {
+  const userId = await getCurrentUserId();
+  requireUserId(userId);
+
+  const parsed = listMyWinningsSchema.parse(input);
+  return listMyWinningsInDb(userId, parsed.groupId);
 }
 
