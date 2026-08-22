@@ -1,5 +1,9 @@
 import { ChallengeScreen } from "@/features/challenges/components/challenge-screen";
-import { mockActiveChallenges, mockChallenges } from "@/lib/mocks/challenges";
+import {
+  mockActiveChallenges,
+  mockChallengeReview,
+  mockChallenges,
+} from "@/lib/mocks/challenges";
 import { getGroup } from "@/lib/mocks/groups";
 
 export default async function ChallengesPage({
@@ -12,6 +16,7 @@ export default async function ChallengesPage({
       group={getGroup(groupId)}
       challenges={mockChallenges}
       activeChallenges={mockActiveChallenges}
+      review={mockChallengeReview}
     />
   );
 }

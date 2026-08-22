@@ -8,9 +8,14 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonCard } from "@/components/ui/neon-card";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { ActiveChallengePanel } from "@/features/challenges/components/active-challenge-panel";
+import { ChallengeApprovalPanel } from "@/features/challenges/components/challenge-approval-panel";
 import { ChallengeCard } from "@/features/challenges/components/challenge-card";
 import { getGroupNavigation } from "@/lib/navigation";
-import type { ActiveChallenge, Challenge } from "@/lib/types/challenge";
+import type {
+  ActiveChallenge,
+  Challenge,
+  ChallengeReview,
+} from "@/lib/types/challenge";
 import type { Group } from "@/lib/types/group";
 
 type Tab = "list" | "approval" | "active";
@@ -25,10 +30,12 @@ export function ChallengeScreen({
   group,
   challenges,
   activeChallenges,
+  review,
 }: {
   group: Group;
   challenges: Challenge[];
   activeChallenges: ActiveChallenge[];
+  review: ChallengeReview;
 }) {
   const [tab, setTab] = useState<Tab>("list");
   const [activeChallengeIndex, setActiveChallengeIndex] = useState(0);
@@ -71,9 +78,7 @@ export function ChallengeScreen({
       ) : null}
 
       {tab === "approval" ? (
-        <NeonCard className="px-5 py-12 text-center">
-          <p className="text-sm font-bold">承諾するチャレンジを確認できます</p>
-        </NeonCard>
+        <ChallengeApprovalPanel review={review} onBack={() => setTab("list")} />
       ) : null}
 
       {tab === "active" ? (

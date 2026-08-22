@@ -22,3 +22,11 @@ export type ActiveChallenge = {
   reward: number;
   approvals: ChallengeApprovalStatus[];
 };
+
+export type ChallengeReview = {
+  id: string;
+  member: User;
+  frequencyLabel: string;
+  reward: number;
+  task: string;
+};
