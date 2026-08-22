@@ -45,6 +45,10 @@ export type RoomAuction = {
 export type AnonymousBid = { amount: number; rank: number };
 
 const BID_STEP = 1;
+// PostgreSQL int4の上限（features/auctions/actions.tsのplaceBidSchemaと
+// 同じ理由。手打ち入力だとここを超える値を入力しやすい。2026-08-23レビュー
+// 指摘）。
+const INT4_MAX = 2147483647;
 
 export function AuctionRoomScreen({
   auction,
@@ -65,7 +69,8 @@ export function AuctionRoomScreen({
   // 常に整数文字列を書き込む。
   const [amount, setAmount] = useState(String(auction.currentPrice + BID_STEP));
   const numericAmount = Number(amount);
-  const isAmountValid = Number.isInteger(numericAmount) && numericAmount > currentPrice;
+  const isAmountValid =
+    Number.isInteger(numericAmount) && numericAmount > currentPrice && numericAmount <= INT4_MAX;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [remainingLabel, setRemainingLabel] = useState(() =>
@@ -135,6 +140,18 @@ export function AuctionRoomScreen({
   );
 
   const canBid = status === "open";
+
+  // ±ボタンで整数値へ正規化する。手打ちで小数（例: 101.5）や下限未満を
+  // 入れた状態でボタンを押しても、常に有効な整数へ補正されるようにする
+  // （2026-08-23レビュー指摘: +側がMath.floorしていないと小数のまま
+  // 増え続けてしまい、-側（Math.maxで下限に落ちる）と挙動が非対称だった）。
+  const stepAmount = (delta: number) => {
+    setAmount((value) => {
+      const parsed = Number(value);
+      const base = Number.isFinite(parsed) ? Math.floor(parsed) : currentPrice;
+      return String(Math.min(INT4_MAX, Math.max(currentPrice + BID_STEP, base + delta)));
+    });
+  };
 
   const submitBid = async () => {
     setMessage("");
@@ -228,13 +245,7 @@ export function AuctionRoomScreen({
               size="icon"
               aria-label="入札額を下げる"
               disabled={!Number.isFinite(numericAmount) || numericAmount <= currentPrice + BID_STEP}
-              onClick={() =>
-                setAmount((value) =>
-                  String(
-                    Math.max(currentPrice + BID_STEP, (Number(value) || currentPrice) - BID_STEP),
-                  ),
-                )
-              }
+              onClick={() => stepAmount(-BID_STEP)}
             >
               −
             </NeonButton>
@@ -245,6 +256,7 @@ export function AuctionRoomScreen({
                 aria-label="入札額"
                 value={amount}
                 min={currentPrice + 1}
+                max={INT4_MAX}
                 step={1}
                 className="h-auto min-h-0 w-24 border-0 bg-transparent p-0 text-center text-xl font-black shadow-none [appearance:textfield] focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 onChange={(event) => setAmount(event.target.value)}
@@ -255,7 +267,8 @@ export function AuctionRoomScreen({
               variant="quiet"
               size="icon"
               aria-label="入札額を上げる"
-              onClick={() => setAmount((value) => String((Number(value) || currentPrice) + BID_STEP))}
+              disabled={numericAmount >= INT4_MAX}
+              onClick={() => stepAmount(BID_STEP)}
             >
               ＋
             </NeonButton>
