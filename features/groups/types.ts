@@ -1,6 +1,7 @@
 // prisma/sql/groups/*.sql のRPCが返す行の型（生SQLのカラム名=snake_case）。
-// UIに渡す前提のcamelCase変換はactions.ts側の責務にしない
-// （このドメインはまだUI未接続のため、変換方針はUI接続時に決める）。
+// UI接続時（issue #71）にsnake_case→camelCase変換は導入しないことに決めた。
+// componentsからはこのsnake_caseのまま参照する（変換層を挟むほどの複雑さが
+// まだないため。必要になったら再検討する）。
 //
 // timestamptz列は$queryRaw経由だとstringではなくDateオブジェクトとして
 // 返ってくる（実DBで確認済み。2026-08-19レビュー指摘）。
