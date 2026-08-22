@@ -9,7 +9,8 @@ import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
 import { avatarToneFromUserId, initialsFromNickname } from "@/lib/avatar";
 import { getGroupNavigation } from "@/lib/navigation";
-import type { Secret } from "@/lib/types/secret";
+
+export type ProfileCollectionItem = { id: string; summary: string };
 
 export function ProfileScreen({
   groupId,
@@ -20,7 +21,7 @@ export function ProfileScreen({
   groupId: string;
   user: { id: string; nickname: string; email: string | null };
   balanceSection: ReactNode;
-  collection: Secret[];
+  collection: ProfileCollectionItem[];
 }) {
   return (
     <MobileShell withNavigation>
@@ -70,17 +71,21 @@ export function ProfileScreen({
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">落札コレクション</h2>
         </div>
-        {collection.map((secret) => (
-          <Link
-            key={secret.id}
-            href={`/groups/${groupId}/collection/${secret.id}`}
-            className="block"
-          >
-            <NeonCard className="p-4">
-              <p className="line-clamp-2 text-sm leading-5 font-bold">{secret.summary}</p>
-            </NeonCard>
-          </Link>
-        ))}
+        {collection.length > 0 ? (
+          collection.map((secret) => (
+            <Link
+              key={secret.id}
+              href={`/groups/${groupId}/collection/${secret.id}`}
+              className="block"
+            >
+              <NeonCard className="p-4">
+                <p className="line-clamp-2 text-sm leading-5 font-bold">{secret.summary}</p>
+              </NeonCard>
+            </Link>
+          ))
+        ) : (
+          <p className="text-sm text-white/45">まだ落札した秘密はありません</p>
+        )}
       </section>
       <BottomNavigation items={getGroupNavigation(groupId)} active="me" />
     </MobileShell>

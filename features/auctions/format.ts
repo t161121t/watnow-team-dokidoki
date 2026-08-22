@@ -1,4 +1,5 @@
-import type { AuctionStatus } from "@/features/auctions/types";
+import type { AuctionPublicViewRow, AuctionStatus } from "@/features/auctions/types";
+import type { Auction } from "@/lib/types/auction";
 
 /**
  * オークション一覧（⑨）・オークション会場（⑩）共通の残り時間表示。
@@ -19,4 +20,25 @@ export function formatRemainingLabel(endsAt: Date | null, status: AuctionStatus)
 
   const seconds = totalSeconds % 60;
   return `残り${minutes}分${seconds}秒`;
+}
+
+/**
+ * auction_public_view の行をUI表示用の Auction 型に正規化する。
+ * オークション一覧（⑨）・ホームの開催中セクション共通（2026-08-22）。
+ */
+export function toAuction(row: AuctionPublicViewRow, isLeading: boolean): Auction {
+  return {
+    id: row.auction_id,
+    groupId: row.group_id,
+    secretId: row.secret_group_item_id,
+    summary: row.summary,
+    category: row.category,
+    rarity: row.rarity as 1 | 2 | 3 | 4 | 5,
+    currentPrice: row.current_price,
+    minimumBid: row.current_price + 20,
+    bidCount: Number(row.bid_count),
+    remainingLabel: formatRemainingLabel(row.ends_at, row.status),
+    isLeading,
+    bids: [],
+  };
 }

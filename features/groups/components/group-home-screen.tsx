@@ -1,23 +1,47 @@
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
 
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
+import { getMyGroupSummary } from "@/features/groups/server/get-my-group-summary";
 import { getGroupNavigation } from "@/lib/navigation";
-import type { Group } from "@/lib/types/group";
+import { getCurrentUserId } from "@/lib/supabase/server";
 
-export function GroupHomeScreen({
-  group,
+/**
+ * グループホーム（⑥）。groupsドメイン内の読み取りは自分でserver/を直接呼ぶ
+ * （docs/アーキテクチャ.md §1.1a）。dealerSection/auctionSectionは
+ * それぞれ別ドメイン（secrets/auctions）の自己取得コンポーネントで、
+ * feature-uiはドメインをまたいで直接importできない（ESLint boundaries）ため、
+ * 呼び出し元のapp/groups/[groupId]/page.tsxで組み立ててReactNodeとして渡す。
+ */
+export async function GroupHomeScreen({
+  groupId,
   dealerSection,
   auctionSection,
 }: {
-  group: Group;
+  groupId: string;
   dealerSection: ReactNode;
   auctionSection: ReactNode;
 }) {
+  if (!z.string().uuid().safeParse(groupId).success) {
+    notFound();
+  }
+
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    redirect(`/login?redirect_to=${encodeURIComponent(`/groups/${groupId}`)}`);
+  }
+
+  const group = await getMyGroupSummary(userId, groupId);
+  if (!group) {
+    notFound();
+  }
+
   return (
     <MobileShell withNavigation className="pt-[58px]">
       <div className="mb-7 flex items-center justify-between gap-3">
