@@ -9,6 +9,7 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
+import { NeonInput } from "@/components/ui/neon-field";
 import { StarRating } from "@/components/ui/star-rating";
 import { getAnonymousBidFeed, getAuction, placeBid } from "@/features/auctions/actions";
 import type { PlaceBidErrorStatus } from "@/features/auctions/actions";
@@ -59,7 +60,12 @@ export function AuctionRoomScreen({
   const [status, setStatus] = useState<AuctionStatus>(auction.status);
   const [endsAt, setEndsAt] = useState<Date | null>(auction.endsAt);
   const [bidFeed, setBidFeed] = useState<AnonymousBid[]>(initialBidFeed);
-  const [amount, setAmount] = useState(auction.currentPrice + BID_STEP);
+  // 手打ち入力にも対応するため文字列で持つ（number stateだと入力途中の
+  // 空文字・削除中の状態を表現できない）。±ボタン・現在価格追随時は
+  // 常に整数文字列を書き込む。
+  const [amount, setAmount] = useState(String(auction.currentPrice + BID_STEP));
+  const numericAmount = Number(amount);
+  const isAmountValid = Number.isInteger(numericAmount) && numericAmount > currentPrice;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [remainingLabel, setRemainingLabel] = useState(() =>
@@ -73,7 +79,7 @@ export function AuctionRoomScreen({
   const [priceForAmountSync, setPriceForAmountSync] = useState(currentPrice);
   if (currentPrice !== priceForAmountSync) {
     setPriceForAmountSync(currentPrice);
-    setAmount(currentPrice + BID_STEP);
+    setAmount(String(currentPrice + BID_STEP));
   }
 
   // 残り時間はendsAt/statusが変わらなくても1秒ごとに表示だけ更新する。
@@ -132,15 +138,19 @@ export function AuctionRoomScreen({
 
   const submitBid = async () => {
     setMessage("");
+    if (!isAmountValid) {
+      setMessage("現在価格を超える金額を入力してください");
+      return;
+    }
     setIsSubmitting(true);
     try {
       // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
       // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
       // 2026-08-23、ユーザー報告で発覚）。placeBidは例外を投げず、戻り値の
       // statusで成功/失敗理由を表現する（セッション切れ・入力不正も含む）。
-      const result = await placeBid({ auctionId: auction.id, amount });
+      const result = await placeBid({ auctionId: auction.id, amount: numericAmount });
       if (result.status === "ok") {
-        setMessage(`${amount.toLocaleString()}ptで入札しました`);
+        setMessage(`${numericAmount.toLocaleString()}ptで入札しました`);
         router.refresh();
       } else {
         setMessage(PLACE_BID_ERROR_MESSAGES[result.status]);
@@ -217,22 +227,35 @@ export function AuctionRoomScreen({
               variant="quiet"
               size="icon"
               aria-label="入札額を下げる"
-              disabled={amount <= currentPrice + BID_STEP}
+              disabled={!Number.isFinite(numericAmount) || numericAmount <= currentPrice + BID_STEP}
               onClick={() =>
-                setAmount((value) => Math.max(currentPrice + BID_STEP, value - BID_STEP))
+                setAmount((value) =>
+                  String(
+                    Math.max(currentPrice + BID_STEP, (Number(value) || currentPrice) - BID_STEP),
+                  ),
+                )
               }
             >
               −
             </NeonButton>
-            <p className="text-xl font-black">
-              {amount.toLocaleString()}
-              <span className="ml-1 text-xs text-white/45">pt</span>
-            </p>
+            <div className="flex items-center gap-1">
+              <NeonInput
+                type="number"
+                inputMode="numeric"
+                aria-label="入札額"
+                value={amount}
+                min={currentPrice + 1}
+                step={1}
+                className="h-auto min-h-0 w-24 border-0 bg-transparent p-0 text-center text-xl font-black shadow-none [appearance:textfield] focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                onChange={(event) => setAmount(event.target.value)}
+              />
+              <span className="text-xs text-white/45">pt</span>
+            </div>
             <NeonButton
               variant="quiet"
               size="icon"
               aria-label="入札額を上げる"
-              onClick={() => setAmount((value) => value + BID_STEP)}
+              onClick={() => setAmount((value) => String((Number(value) || currentPrice) + BID_STEP))}
             >
               ＋
             </NeonButton>
@@ -240,7 +263,7 @@ export function AuctionRoomScreen({
           <NeonButton
             size="lg"
             className="mt-4 w-full"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isAmountValid}
             aria-busy={isSubmitting}
             onClick={submitBid}
           >
