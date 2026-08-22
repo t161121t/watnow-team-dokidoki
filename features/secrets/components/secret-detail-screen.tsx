@@ -10,9 +10,17 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
 import { approveDealerAssignment, declineDealer } from "@/features/auctions/actions";
+import type { DealerActionErrorStatus } from "@/features/auctions/actions";
 import { listSecretForAuction } from "@/features/secrets/actions";
 import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { getGroupNavigation } from "@/lib/navigation";
+
+const DEALER_ACTION_ERROR_MESSAGES: Record<DealerActionErrorStatus, string> = {
+  not_authorized: "この操作を行う権限がありません",
+  no_other_eligible_dealer: "他に割り当て可能なディーラーがいません",
+  already_processed: "この案件は既に処理済みです",
+  unknown_error: "操作に失敗しました",
+};
 
 export type SecretDetailData = {
   groupId: string;
@@ -56,11 +64,15 @@ export function SecretDetailScreen({
   const handleApprove = async () => {
     if (!secret.auctionId) return;
     setIsSubmitting(true);
-    try {
-      await approveDealerAssignment({ auctionId: secret.auctionId });
+    // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+    // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+    // 2026-08-23、ユーザー報告で発覚）。approveDealerAssignmentは例外を
+    // 投げず、戻り値のstatusで成功/失敗理由を表現する。
+    const result = await approveDealerAssignment({ auctionId: secret.auctionId });
+    if (result.status === "ok") {
       router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "承認に失敗しました");
+    } else {
+      setMessage(DEALER_ACTION_ERROR_MESSAGES[result.status]);
       setIsSubmitting(false);
     }
   };
@@ -68,11 +80,11 @@ export function SecretDetailScreen({
   const handleDecline = async () => {
     if (!secret.auctionId) return;
     setIsSubmitting(true);
-    try {
-      await declineDealer({ auctionId: secret.auctionId });
+    const result = await declineDealer({ auctionId: secret.auctionId });
+    if (result.status === "ok") {
       router.push(backHref);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "差し戻しに失敗しました");
+    } else {
+      setMessage(DEALER_ACTION_ERROR_MESSAGES[result.status]);
       setIsSubmitting(false);
     }
   };
