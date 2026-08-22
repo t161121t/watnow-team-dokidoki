@@ -115,6 +115,7 @@ model User {
   createdGroups     Group[]            @relation("GroupCreatedBy")
   groupMemberships  GroupMember[]      @relation("GroupMemberUser")
   invitesSent       GroupMember[]      @relation("GroupMemberInvitedBy")
+  createdInviteLinks GroupInviteLink[] @relation("GroupInviteLinkCreatedBy")
   wallets           Wallet[]
   walletLedgerOwn   WalletLedger[]     @relation("WalletLedgerUser")
   walletLedgerActed WalletLedger[]     @relation("WalletLedgerCreatedBy")
@@ -145,6 +146,7 @@ model Group {
 
   creator           User               @relation("GroupCreatedBy", fields: [createdBy], references: [id])
   members           GroupMember[]
+  inviteLink        GroupInviteLink?
   wallets           Wallet[]
   walletLedger      WalletLedger[]
   secretGroupItems  SecretGroupItem[]
@@ -156,7 +158,9 @@ model Group {
   @@map("groups")
 }
 
-/// §4.3. 招待コード廃止・直接招待方式。status の遷移はdocs/DB.md参照
+/// §4.3. 2026-08-22: URL招待方式に変更（招待コード方式へ回帰。§4.4参照）。
+/// join_group_via_invite_link経由の参加はstatusが'invited'を経由せず直接
+/// 'active'になる。status の遷移はdocs/DB.md参照
 model GroupMember {
   groupId   String       @map("group_id") @db.Uuid
   userId    String       @map("user_id") @db.Uuid
@@ -174,6 +178,22 @@ model GroupMember {
   @@id([groupId, userId])
   @@index([userId, status])
   @@map("group_members")
+}
+
+/// §4.4. 2026-08-22: URL招待方式で復活（旧`group_invites`の後継。issue #71）。
+/// group_idをPKにすることで「グループごとに有効なリンクは常に最大1つ」を
+/// 表現する（再発行=upsertで自動的に旧リンクを無効化。有効期限・使用回数
+/// 制限は持たない。取り消しはRPCで行削除するだけ）。
+model GroupInviteLink {
+  groupId   String   @id @map("group_id") @db.Uuid
+  code      String   @unique
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group   Group @relation(fields: [groupId], references: [id])
+  creator User  @relation("GroupInviteLinkCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("group_invite_links")
 }
 
 /// §4.6
