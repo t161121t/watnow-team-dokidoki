@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 
 import { NeonButton } from "@/components/ui/neon-button";
 import { approveChallenge } from "@/features/challenges/actions";
+import type { ApproveChallengeErrorStatus } from "@/features/challenges/actions";
+
+const APPROVE_CHALLENGE_ERROR_MESSAGES: Record<ApproveChallengeErrorStatus, string> = {
+  not_authenticated: "ログインが必要です",
+  invalid_input: "入力内容を確認してください",
+  attempt_not_found: "この提出は既に処理済みです",
+  not_authorized: "この操作を行う権限がありません",
+  cannot_review_own: "自分の提出は自分で承認できません",
+  unknown_error: "処理に失敗しました",
+};
 
 export function ChallengeApprovalActions({ attemptId }: { attemptId: string }) {
   const router = useRouter();
@@ -15,10 +25,21 @@ export function ChallengeApprovalActions({ attemptId }: { attemptId: string }) {
     setIsSubmitting(true);
     setMessage("");
     try {
-      await approveChallenge({ attemptId, decision });
-      router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "処理に失敗しました");
+      // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+      // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+      // 2026-08-23、features/auctions/actions.tsの同種の修正と同じ理由）。
+      // approveChallengeは例外を投げず戻り値のstatusで成功/失敗理由を
+      // 表現する（セッション切れ・入力不正も含む）。
+      const result = await approveChallenge({ attemptId, decision });
+      if (result.status === "ok") {
+        router.refresh();
+      } else {
+        setMessage(APPROVE_CHALLENGE_ERROR_MESSAGES[result.status]);
+      }
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setMessage("通信エラーが発生しました。もう一度お試しください");
+    } finally {
       setIsSubmitting(false);
     }
   };

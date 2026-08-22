@@ -13,6 +13,7 @@ import { GoogleContinueButton } from "@/features/auth/components/google-continue
 import { signUpWithPassword } from "@/features/auth/actions";
 import type { SignupInput } from "@/features/auth/validation";
 import { signupSchema } from "@/features/auth/validation";
+import { PASSWORD_AUTH_ERROR_MESSAGES } from "@/features/auth/password-auth-error-messages";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -41,23 +42,30 @@ export function SignupScreen() {
   const submitSignup = async (values: SignupInput) => {
     setSubmitError(null);
     setIsSubmitting(true);
-    // メール確認不要な場合はsignUpWithPassword内でredirect()する
-    // （このPromiseは解決せずブラウザが遷移する）。確認が必要な場合のみ
-    // confirmationRequiredがtrueで返り、ここで完了メッセージに切り替える。
     try {
+      // メール確認不要な場合はsignUpWithPassword内でredirect()する
+      // （このPromiseは解決せずブラウザが遷移する）。確認が必要な場合のみ
+      // status:"confirmation_required"が返り、ここで完了メッセージに
+      // 切り替える。throw/error.messageの文字列比較には依存しない
+      // （本番ビルドではServer Actionのエラーメッセージがサニタイズされ
+      // 判定できなくなるため。2026-08-23、features/auctions/actions.ts
+      // の同種の修正と同じ理由）。signUpWithPasswordは例外を投げず戻り値の
+      // statusで成功/失敗理由を表現する（セッション確立後のcreateProfile
+      // 失敗も含む）。
       const result = await signUpWithPassword({
         email: values.email,
         password: values.password,
         nickname: values.nickname,
         redirectTo: "/groups",
       });
-      if (result.confirmationRequired) {
+      if (result.status === "confirmation_required") {
         setConfirmationSent(true);
+        return;
       }
-    } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "登録に失敗しました",
-      );
+      setSubmitError(PASSWORD_AUTH_ERROR_MESSAGES[result.status]);
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setSubmitError("通信エラーが発生しました。もう一度お試しください");
     } finally {
       setIsSubmitting(false);
     }
