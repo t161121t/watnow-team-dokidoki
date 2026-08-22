@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
-import { BackButton } from "@/components/ui/back-button";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonTextarea } from "@/components/ui/neon-field";
 import { StarRating } from "@/components/ui/star-rating";
+import { registerSecret } from "@/features/secrets/actions";
 import { cn } from "@/lib/utils";
 import type { SecretCategory } from "@/lib/types/secret";
 
@@ -22,8 +22,32 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<SecretCategory>("黒歴史");
   const [rarity, setRarity] = useState<1 | 2 | 3 | 4 | 5>(3);
-  const [value, setValue] = useState(200);
-  const canContinue = summary.trim().length > 0 && body.trim().length > 0;
+  const [price, setPrice] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const numericPrice = Number(price);
+  const isPriceValid = Number.isInteger(numericPrice) && numericPrice > 0;
+  const canContinue =
+    summary.trim().length > 0 && body.trim().length > 0 && isPriceValid;
+
+  const handleRegister = async () => {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await registerSecret({
+        groupId,
+        body,
+        summary,
+        category,
+        rarity,
+        askingPrice: numericPrice,
+      });
+      router.push(`/groups/${groupId}/secrets`);
+    } catch {
+      setIsSubmitting(false);
+      setError("秘密の登録に失敗しました");
+    }
+  };
 
   return (
     <MobileShell>
@@ -54,12 +78,13 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
 
       {step === 1 ? (
         <div className="space-y-6">
-          <NeonField id="secret-summary" label="秘密の見出し">
-            <NeonInput
+          <NeonField id="secret-summary" label="秘密の概要">
+            <NeonTextarea
               id="secret-summary"
               value={summary}
-              maxLength={60}
-              placeholder="見出しを入力"
+              maxLength={120}
+              className="min-h-28"
+              placeholder="秘密の内容を短く説明（ディーラーが閲覧できます）"
               onChange={(event) => setSummary(event.target.value)}
             />
           </NeonField>
@@ -105,15 +130,16 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
               />
             </div>
           </div>
-          <NeonField id="secret-value" label="秘密の価値">
+          <NeonField id="secret-price" label="秘密の価格">
             <NeonInput
-              id="secret-value"
+              id="secret-price"
               type="number"
-              min={50}
-              max={1000}
-              step={10}
-              value={value}
-              onChange={(event) => setValue(Number(event.target.value))}
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={price}
+              placeholder="価格を入力"
+              onChange={(event) => setPrice(event.target.value)}
             />
           </NeonField>
           <NeonButton
@@ -128,8 +154,10 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
       ) : (
         <div className="space-y-5">
           <NeonCard className="p-5">
-            <p className="text-[10px] text-white/40">見出し</p>
-            <h2 className="mt-2 text-base leading-7 font-bold">{summary}</h2>
+            <p className="text-[10px] text-white/40">概要</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">
+              {summary}
+            </p>
             <div className="my-4 h-px bg-white/10" />
             <p className="text-[10px] text-white/40">本文</p>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">{body}</p>
@@ -143,22 +171,25 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
                 <StarRating value={rarity} label="レア度" className="mt-1" />
               </div>
               <div>
-                <p className="text-white/38">価値</p>
-                <p className="mt-1 font-bold">{value.toLocaleString()}pt</p>
+                <p className="text-white/38">価格</p>
+                <p className="mt-1 font-bold">{numericPrice.toLocaleString()}pt</p>
               </div>
             </div>
           </NeonCard>
-          <div className="grid grid-cols-[0.7fr_1.3fr] gap-3">
-            <BackButton
-              onClick={() => setStep(1)}
-              aria-label="入力内容を修正する"
-              className="justify-self-center"
-            />
+          {error ? (
+            <p role="alert" className="text-[13px] font-bold text-[#ffb4c9]">
+              {error}
+            </p>
+          ) : null}
+          <div>
             <NeonButton
               size="lg"
-              onClick={() => router.push(`/groups/${groupId}/secrets`)}
+              className="w-full"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              onClick={handleRegister}
             >
-              登録する
+              {isSubmitting ? "登録中…" : "登録する"}
             </NeonButton>
           </div>
         </div>

@@ -27,7 +27,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function LoginScreen() {
+export function LoginScreen({ redirectTo = "/groups" }: { redirectTo?: string } = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<LoginInput>({
@@ -45,7 +45,7 @@ export function LoginScreen() {
       await signInWithPassword({
         email: values.email,
         password: values.password,
-        redirectTo: "/groups",
+        redirectTo,
       });
     } catch (error) {
       setIsSubmitting(false);
@@ -154,7 +154,7 @@ export function LoginScreen() {
             <span className="h-[1.5px] min-w-px flex-1 bg-[#b75ee3]" />
           </div>
 
-          <GoogleContinueButton />
+          <GoogleContinueButton redirectTo={redirectTo} />
 
           <p className="mt-3 flex items-start justify-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] leading-normal text-white [font-family:var(--font-noto-sans-jp)]">
             <span className="font-medium">アカウントをお持ちでない方は</span>

@@ -5,11 +5,9 @@ import { getCurrentUserId } from "@/lib/supabase/server";
 import { approveDealerAssignment as approveDealerAssignmentInDb } from "@/features/auctions/server/approve-dealer-assignment";
 import { declineDealer as declineDealerInDb } from "@/features/auctions/server/decline-dealer";
 import { placeBid as placeBidInDb } from "@/features/auctions/server/place-bid";
-import { getAuctionList as getAuctionListInDb } from "@/features/auctions/server/get-auction-list";
 import { getBidderIdentifiedBids as getBidderIdentifiedBidsInDb } from "@/features/auctions/server/get-bidder-identified-bids";
 import { getAnonymousBidFeed as getAnonymousBidFeedInDb } from "@/features/auctions/server/get-anonymous-bid-feed";
 import { getMyDealerAuctions as getMyDealerAuctionsInDb } from "@/features/auctions/server/get-my-dealer-auctions";
-import { getMyWinningAuctionIds as getMyWinningAuctionIdsInDb } from "@/features/auctions/server/get-my-winning-auction-ids";
 import { getAuction as getAuctionInDb } from "@/features/auctions/server/get-auction";
 import { getAuctionBySecretGroupItem as getAuctionBySecretGroupItemInDb } from "@/features/auctions/server/get-auction-by-secret-group-item";
 
@@ -102,15 +100,6 @@ export async function placeBid(input: { auctionId: string; amount: number }) {
 
 const groupIdSchema = z.object({ groupId: z.string().uuid() });
 
-/** ⑨オークション一覧。auction_public_view経由。 */
-export async function getAuctionList(input: { groupId: string }) {
-  const userId = await getCurrentUserId();
-  requireUserId(userId);
-
-  const parsed = groupIdSchema.parse(input);
-  return getAuctionListInDb(userId, parsed.groupId);
-}
-
 /** ⑩オークション会場。auction_public_view経由で1件取得。 */
 export async function getAuction(input: { auctionId: string }) {
   const userId = await getCurrentUserId();
@@ -148,15 +137,6 @@ export async function getMyDealerAuctions(input: { groupId: string }) {
 
   const parsed = groupIdSchema.parse(input);
   return getMyDealerAuctionsInDb(userId, parsed.groupId);
-}
-
-/** ⑨オークション一覧で「あなたが最高入札者です」を表示するために使う。 */
-export async function getMyWinningAuctionIds(input: { groupId: string }) {
-  const userId = await getCurrentUserId();
-  requireUserId(userId);
-
-  const parsed = groupIdSchema.parse(input);
-  return getMyWinningAuctionIdsInDb(userId, parsed.groupId);
 }
 
 const secretGroupItemIdSchema = z.object({ secretGroupItemId: z.string().uuid() });

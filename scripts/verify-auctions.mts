@@ -281,6 +281,43 @@ async function main() {
   );
   assert(sellerBidsOpen.length === 0, "getMyWinningAuctionIds相当: 入札していないユーザーは0件");
 
+  // --- getAuctionBySecretGroupItem相当（features/auctions/server/get-auction-by-secret-group-item.ts） ---
+  // 不落札で秘密が返却され再出品されると、同じsecret_group_item_idに対して
+  // 複数のauctionsが存在しうる。新しいauctionはpending_dealer_approval状態で
+  // starts_atがまだnullのため、starts_at DESC NULLS LASTで並べると常に古い
+  // （完了済みの）auctionが選ばれてしまっていた（2026-08-22レビュー指摘）。
+  // auctionsに戻ってcreated_at DESCで並べる修正を検証する。
+  // secret_group_items_one_active_auction（1 secret_group_itemにつき同時に
+  // active（pending_dealer_approval/open/finalizing）なauctionは1つまでの
+  // 部分ユニークインデックス）を満たすため、既存auctionを終了状態にしてから
+  // 新しいauctionを作る。
+  await prisma.auction.update({ where: { id: auctionId }, data: { status: "sold" } });
+  const relistedAuction = await prisma.auction.create({
+    data: {
+      groupId,
+      secretGroupItemId: item.id,
+      sellerId: seller,
+      dealerId: dealer1,
+      status: "pending_dealer_approval",
+      startingPrice: 100,
+      currentPrice: 100,
+      listingPrepayAmount: 100,
+    },
+  });
+  const auctionForItem = await withRlsContext(seller, (tx) =>
+    tx.$queryRaw<{ auction_id: string }[]>`
+      SELECT apv.* FROM auction_public_view apv
+      JOIN auctions a ON a.id = apv.auction_id
+      WHERE apv.secret_group_item_id = ${item.id}::uuid
+      ORDER BY a.created_at DESC
+      LIMIT 1
+    `,
+  );
+  assert(
+    auctionForItem[0]?.auction_id === relistedAuction.id,
+    "getAuctionBySecretGroupItem相当: 再出品後は新しい（starts_atがnullの）auctionが選ばれる",
+  );
+
   console.log("\nALL CHECKS PASSED");
 }
 

@@ -14,7 +14,13 @@ export default async function AuctionRoomPage({
     getAnonymousBidFeed({ auctionId }),
   ]);
 
-  if (!auction) {
+  // ルートのgroupIdとauction本来のgroup_idが一致することを確認する。
+  // 一致確認をせずに描画すると、別グループのauctionを閲覧できてしまい、
+  // WalletBalanceにも誤ったグループの残高が表示されてしまう
+  // （place_bid RPC自体はauction行から server 側で group_id を導出するため
+  // 課金は安全だが、表示上の「グループ完全分離」原則の違反となる。
+  // 2026-08-22レビュー指摘）。
+  if (!auction || auction.group_id !== groupId) {
     notFound();
   }
 

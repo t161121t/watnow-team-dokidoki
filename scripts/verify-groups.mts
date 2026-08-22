@@ -184,6 +184,41 @@ async function main() {
     "join_group_via_invite_link: 既にactiveなユーザーはno-opで成功する（二重参加エラーにしない）",
   );
 
+  // --- getGroup相当（features/groups/server/get-group.ts）: RLSでmember以外はnull ---
+  const groupAsMember = await withRlsContext(userA, (tx) =>
+    tx.group.findUnique({ where: { id: group.id } }),
+  );
+  assert(
+    groupAsMember?.id === group.id,
+    "getGroup相当: 所属memberはgroupを取得できる",
+  );
+  const groupAsNonMember = await withRlsContext(userF, (tx) =>
+    tx.group.findUnique({ where: { id: group.id } }),
+  );
+  assert(
+    groupAsNonMember === null,
+    "getGroup相当: 非member（userF）にはnullが返る（RLS）",
+  );
+
+  // --- listGroupMembers相当（features/groups/server/list-group-members.ts） ---
+  const memberRows = await withRlsContext(userA, (tx) =>
+    tx.groupMember.findMany({
+      where: { groupId: group.id, status: "active" },
+      include: { user: { select: { id: true, nickname: true, avatarPath: true } } },
+    }),
+  );
+  assert(
+    memberRows.some((m) => m.userId === userA && m.user.nickname === "VerifyGroupsAdmin"),
+    "listGroupMembers相当: メンバーのnicknameがuser joinで取得できる",
+  );
+  assert(
+    memberRows.length === 5 &&
+      [userA, userB, userC, userD, userE].every((id) =>
+        memberRows.some((m) => m.userId === id),
+      ),
+    "listGroupMembers相当: activeな5人（admin+新規参加4人）がすべて含まれる",
+  );
+
   // --- update_group_member_role ---
   await withRlsContext(userA, (tx) =>
     tx.$executeRaw`SELECT update_group_member_role(${group.id}::uuid, ${userD}::uuid, 'admin'::member_role)`,

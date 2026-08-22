@@ -11,6 +11,7 @@ import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
 import { approveDealerAssignment, declineDealer } from "@/features/auctions/actions";
 import { listSecretForAuction } from "@/features/secrets/actions";
+import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { getGroupNavigation } from "@/lib/navigation";
 
 export type SecretDetailData = {
@@ -28,9 +29,16 @@ export type SecretDetailData = {
   bids: { bidderNickname: string; amount: number }[];
 };
 
-export function SecretDetailScreen({ secret }: { secret: SecretDetailData }) {
+export function SecretDetailScreen({
+  secret,
+  returnTab,
+}: {
+  secret: SecretDetailData;
+  returnTab: SecretListTab;
+}) {
   const router = useRouter();
   const isDealer = secret.viewRole === "dealer";
+  const backHref = `/groups/${secret.groupId}/secrets?tab=${returnTab}`;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -62,7 +70,7 @@ export function SecretDetailScreen({ secret }: { secret: SecretDetailData }) {
     setIsSubmitting(true);
     try {
       await declineDealer({ auctionId: secret.auctionId });
-      router.push(`/groups/${secret.groupId}/secrets`);
+      router.push(backHref);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "差し戻しに失敗しました");
       setIsSubmitting(false);
@@ -73,7 +81,7 @@ export function SecretDetailScreen({ secret }: { secret: SecretDetailData }) {
     <MobileShell withNavigation>
       <ScreenHeader
         title={isDealer ? "ディーラー出品" : "あなたの出品"}
-        backHref={`/groups/${secret.groupId}/secrets`}
+        backHref={backHref}
       />
 
       <NeonCard className="p-5">
