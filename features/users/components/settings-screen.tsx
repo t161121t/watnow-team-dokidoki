@@ -3,8 +3,10 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { Avatar } from "@/components/ui/avatar";
 import { MockActionButton } from "@/components/ui/mock-action-button";
 import { NeonCard } from "@/components/ui/neon-card";
-import { NeonLink } from "@/components/ui/neon-button";
-import type { User } from "@/lib/types/user";
+import { neonButtonVariants } from "@/components/ui/neon-button";
+import { signOut } from "@/features/auth/actions";
+import { avatarToneFromUserId, initialsFromNickname } from "@/lib/avatar";
+import { cn } from "@/lib/utils";
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
@@ -13,6 +15,13 @@ function SettingRow({ label, value }: { label: string; value: string }) {
         <p className="text-[10px] text-white/38">{label}</p>
         <p className="mt-0.5 truncate text-sm font-bold">{value}</p>
       </div>
+      {/*
+        ニックネーム/メールアドレス/パスワードの変更は対応するバックエンド
+        （update_profile RPC・Supabase Authのメール/パスワード変更フロー）が
+        未実装のため、今回のUI接続では見送ってモックのまま残す
+        （features/groups/components/group-manage-screen.tsxの
+        「グループ設定」と同じ判断）。
+      */}
       <MockActionButton
         variant="quiet"
         size="sm"
@@ -24,15 +33,21 @@ function SettingRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SettingsScreen({ user }: { user: User }) {
+export function SettingsScreen({
+  user,
+  backHref,
+}: {
+  user: { id: string; nickname: string; email: string | null };
+  backHref: string;
+}) {
   return (
     <MobileShell>
-      <ScreenHeader title="アカウント設定" backHref="/groups/night-owls/me" />
+      <ScreenHeader title="アカウント設定" backHref={backHref} />
 
       <div className="mb-7 text-center">
         <Avatar
-          initials={user.initials}
-          tone={user.avatarColor}
+          initials={initialsFromNickname(user.nickname)}
+          tone={avatarToneFromUserId(user.id)}
           className="mx-auto size-24 text-2xl"
         />
         <MockActionButton
@@ -46,14 +61,19 @@ export function SettingsScreen({ user }: { user: User }) {
       </div>
 
       <div className="space-y-3">
-        <SettingRow label="ニックネーム" value={user.name} />
-        <SettingRow label="メールアドレス" value={user.email} />
+        <SettingRow label="ニックネーム" value={user.nickname} />
+        <SettingRow label="メールアドレス" value={user.email ?? "未設定"} />
         <SettingRow label="パスワード" value="••••••••••••" />
       </div>
 
-      <NeonLink href="/login" variant="danger" size="lg" className="mt-8 w-full">
-        ログアウト
-      </NeonLink>
+      <form action={signOut}>
+        <button
+          type="submit"
+          className={cn(neonButtonVariants({ variant: "danger", size: "lg" }), "mt-8 w-full")}
+        >
+          ログアウト
+        </button>
+      </form>
     </MobileShell>
   );
 }

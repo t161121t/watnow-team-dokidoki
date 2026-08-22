@@ -144,12 +144,14 @@ function mapPasswordAuthError(message: string): string {
   return "認証に失敗しました。時間をおいて再度お試しください";
 }
 
+/** アカウント設定（⑮）でのログアウト。成功したらログイン画面へ戻す。 */
 export async function signOut() {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signOut();
   if (error) {
     throw new Error("ログアウトに失敗しました");
   }
+  redirect("/login");
 }
 
 const completeProfileSchema = z.object({
@@ -191,6 +193,35 @@ export async function completeProfile(input: {
 
   const parsed = completeProfileSchema.parse(input);
   return createProfile(userId, parsed.nickname, parsed.avatarPath ?? null);
+}
+
+/**
+ * アカウント設定（⑮）・マイページ（⑭）での本人プロフィール表示用。
+ * emailはauth.usersにしか無い（public.usersに複製していない）ため、
+ * getProfile（public.users）とSupabase Authのgetterを両方呼んで合成する。
+ *
+ * 未ログイン時はnullを返す（例外にしない）。呼び出し元のpage.tsxが
+ * redirect("/login")するかどうかを判断する（proxy.tsではまだ保護対象
+ * ルートのガードを実装していない。proxy.tsのコメント参照）。
+ */
+export async function getCurrentUserProfile() {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return null;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const [{ data }, profile] = await Promise.all([
+    supabase.auth.getUser(),
+    getProfile(userId),
+  ]);
+
+  return {
+    id: userId,
+    email: data.user?.email ?? null,
+    nickname: profile?.nickname ?? null,
+    avatarPath: profile?.avatarPath ?? null,
+  };
 }
 
 /**
