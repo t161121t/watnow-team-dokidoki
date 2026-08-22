@@ -20,11 +20,7 @@ const UPLOAD_EXTENSIONS = {
   "image/webp": "webp",
 } as const;
 
-export function CreateGroupScreen({
-  backHref = "/groups",
-}: {
-  backHref?: string;
-}) {
+export function CreateGroupScreen() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2>(1);
@@ -72,7 +68,7 @@ export function CreateGroupScreen({
 
   return (
     <MobileShell>
-      <ScreenHeader title="グループを作る" backHref={backHref} />
+      <ScreenHeader title="グループを作る" backHref="/groups" />
 
       <ol className="mb-8 flex items-center justify-center" aria-label="作成ステップ">
         {[1, 2].map((item) => (

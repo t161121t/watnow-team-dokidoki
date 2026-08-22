@@ -41,8 +41,14 @@ export async function GroupSwitcherScreen() {
           ))}
         </div>
       ) : (
-        <div className="rounded-[22px] border border-dashed border-[#c038ff]/45 bg-black/50 px-6 py-12 text-center">
-          <p className="font-bold">まだグループがありません</p>
+        <div className="flex flex-col items-center gap-6 rounded-[22px] border border-dashed border-[#c038ff]/45 bg-black/50 px-6 py-12 text-center">
+          <div className="space-y-2">
+            <p className="font-bold">まだグループがありません</p>
+            <p className="text-sm text-white/55">新しいグループを作りましょう</p>
+          </div>
+          <NeonLink href="/groups/new" size="lg" className="w-full">
+            グループを作る
+          </NeonLink>
         </div>
       )}
     </MobileShell>

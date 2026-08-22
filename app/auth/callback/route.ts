@@ -10,8 +10,9 @@ import { getMyGroups } from "@/features/groups/actions";
  * 明示的に指定された場合のみ付与される（通常は未指定）。
  *
  * `redirect_to`が無い場合は、本人の所属groupを見て遷移先を決める
- * （docs/画面.md §2: 所属ありならホーム画面⑥、未所属なら参加/作成
- * （features/groups/components/group-entry-screen.tsx、`/groups/join`）へ）。
+ * （docs/画面.md §2: 所属ありならホーム画面⑥、未所属ならグループ一覧
+ * （features/groups/components/group-switcher-screen.tsx、`/groups`）の
+ * 空状態へ。旧参加/作成ハブ`/groups/join`は/groupsへ統合済み）。
  * ドメインをまたぐ判断（auth×groups）なのでapp/側（ここ）で両ドメインの
  * actions.tsを呼ぶ形にした（features/README.mdの依存方向に合わせるため。
  * features/auth/actions.tsからfeatures/groups/*を直接importしない）。
@@ -32,6 +33,6 @@ export async function GET(request: Request) {
   }
 
   const myGroups = await getMyGroups();
-  const destination = myGroups.length > 0 ? `/groups/${myGroups[0].id}` : "/groups/join";
+  const destination = myGroups.length > 0 ? `/groups/${myGroups[0].id}` : "/groups";
   return NextResponse.redirect(`${origin}${destination}`);
 }
