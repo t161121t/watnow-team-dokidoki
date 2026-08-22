@@ -103,6 +103,8 @@ export type SignInResult = { status: PasswordAuthErrorStatus };
  * メールアドレス・パスワードでのログイン（issue #76）。Googleと違い
  * リダイレクトを挟まずこのServer Action内でセッションが確立するため、
  * 成功時はそのままredirect()する（呼び出し元に戻ってくるのは失敗時のみ）。
+ * redirectTo省略時は"/"へ送り、app/page.tsxが所属を見てホーム⑥または
+ * 参加/作成へ分岐する（このファイルからfeatures/groupsは呼べない）。
  */
 export async function signInWithPassword(input: {
   email: string;
@@ -123,7 +125,7 @@ export async function signInWithPassword(input: {
     return { status: mapPasswordAuthErrorStatus(error.message) };
   }
 
-  redirect(parsed.data.redirectTo ?? "/groups");
+  redirect(parsed.data.redirectTo ?? "/");
 }
 
 export type SignUpResult = { status: "confirmation_required" } | { status: PasswordAuthErrorStatus };
@@ -179,7 +181,7 @@ export async function signUpWithPassword(input: {
     return { status: "unknown_error" };
   }
 
-  redirect(parsed.data.redirectTo ?? "/groups");
+  redirect(parsed.data.redirectTo ?? "/");
 }
 
 /** アカウント設定（⑮）でのログアウト。成功したらログイン画面へ戻す。 */

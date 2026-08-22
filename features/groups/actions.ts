@@ -61,9 +61,9 @@ export async function createGroup(input: { name: string; iconPath?: string }) {
 }
 
 /**
- * 本人が所属するactiveなgroupの一覧。ログイン直後の遷移先判定
- * （app/auth/callback/route.ts。所属ありならホーム⑥、未所属なら
- * 参加/作成へ、docs/画面.md §2）に使う。
+ * 本人が所属するactiveなgroupの一覧。ログイン済みの遷移先判定
+ * （app/page.tsx・app/login/page.tsx・app/auth/callback/route.ts。
+ * 所属ありならホーム⑥、未所属なら参加/作成へ、docs/画面.md §2）に使う。
  */
 export async function getMyGroups() {
   const userId = await getCurrentUserId();

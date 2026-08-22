@@ -28,7 +28,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function LoginScreen({ redirectTo = "/groups" }: { redirectTo?: string } = {}) {
+export function LoginScreen({ redirectTo }: { redirectTo?: string } = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<LoginInput>({
