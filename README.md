@@ -21,7 +21,7 @@
 
 ## セットアップ
 
-前提: Node.js（`@types/node` は v20 系を想定）、npm。
+前提: Node.js 26 以上（`.nvmrc` 参照。`nvm use` で切り替え）、npm。
 
 1. リポジトリを clone する
 2. `.env.example` を `.env` にコピーする
@@ -29,9 +29,10 @@
    cp .env.example .env
    ```
 3. `.env` の `DATABASE_URL` を埋める
-   - Supabase の実 DB に繋ぐ場合: Supabase ダッシュボード → **Project Settings → Database → Connection string** から接続文字列を取得し、パスワード部分を実際の DB パスワードに置き換える
-     - `sslmode=require&uselibpqcompat=true` を付けること（`pg` の新しいデフォルトだと `require` が証明書検証ありの `verify-full` 扱いになり、Supabase の証明書で失敗するため）
+   - Supabase の実 DB に繋ぐ場合: Supabase ダッシュボード → **Project Settings → Database → Connect** → **Session pooler** の接続文字列を使う（**Direct connection ではない**。直接接続ホスト `db.[PROJECT-REF].supabase.co:5432` は IPv6 専用で、IPv6 が使えないネットワークからは繋がらない。開発者複数人がこれで詰まっているので必ず Session pooler を使うこと）。パスワード部分を実際の DB パスワードに置き換える
+     - `pgbouncer=true`（pooler接続に必須）と `sslmode=require&uselibpqcompat=true` を付けること（`pg` の新しいデフォルトだと `require` が証明書検証ありの `verify-full` 扱いになり、Supabase の証明書で失敗するため）。詳細は `.env.example` のコメント参照
      - DB パスワードが分からない場合は Supabase ダッシュボードでリセットが必要（既存の接続は切れる点に注意）
+     - `prisma migrate dev` 等スキーマ変更コマンドは pooler の transaction pooling と相性が悪いことがある。その場合だけ Direct connection に一時的に切り替える
    - ローカルだけで試したい場合: `.env.example` 内のコメントにある `prisma dev` 用のローカル接続文字列を使う（`npm run db:dev` でローカル Postgres を起動）
 4. 依存インストール〜DB 接続確認をまとめて実行する
    ```bash
