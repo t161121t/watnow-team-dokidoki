@@ -40,6 +40,27 @@ BEGIN
     RAISE EXCEPTION 'submit_challenge: evidence photo is required for this challenge';
   END IF;
 
+  -- 2026-08-23 PRレビュー反映: p_evidence_pathが提出者本人のフォルダ配下か
+  -- 検証していなかった。challenge-evidenceバケットのSELECTポリシー
+  -- （prisma/sql/challenges/003_evidence_storage.sql）はattemptのgroupの
+  -- アクティブメンバーに写真を公開する設計のため、検証無しだと悪意あるユーザーが
+  -- 別グループで知った他人のevidence_pathを自分の別groupのattemptに渡し、
+  -- そのgroupのメンバーにも署名付きURL発行権限を広げられてしまう
+  -- （グループ完全分離違反）。Server Action側のバリデーションだけでは直接
+  -- RPC呼び出しを防げないため、DB/RPC側を正本にする。
+  IF p_evidence_path IS NOT NULL THEN
+    IF p_evidence_path NOT LIKE (auth.uid()::text || '/%') THEN
+      RAISE EXCEPTION 'submit_challenge: evidence_path must belong to the submitting user';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM storage.objects
+      WHERE bucket_id = 'challenge-evidence' AND name = p_evidence_path
+    ) THEN
+      RAISE EXCEPTION 'submit_challenge: evidence_path does not exist in challenge-evidence bucket';
+    END IF;
+  END IF;
+
   IF v_challenge.cooldown_seconds IS NOT NULL THEN
     SELECT * INTO v_last_attempt
     FROM challenge_attempts
