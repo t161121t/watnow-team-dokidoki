@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
 
 import { getCurrentUserProfile } from "@/features/auth/actions";
 import { ProfileScreen } from "@/features/users/components/profile-screen";
@@ -9,6 +10,15 @@ export default async function MyPage({
   params,
 }: PageProps<"/groups/[groupId]/me">) {
   const { groupId } = await params;
+
+  // グループ切替（/groups）はまだモックデータのままで、UUIDでないID
+  // （"night-owls"等）を渡してくることがある。WalletBalance内部のzod
+  // （UUID必須）にそのまま投げると例外で落ちるため、ここで先に弾いて404にする
+  // （2026-08-22レビュー指摘）。
+  if (!z.string().uuid().safeParse(groupId).success) {
+    notFound();
+  }
+
   const collection = getSecretsForGroup(groupId).filter(
     (secret) => secret.viewRole === "winner",
   );

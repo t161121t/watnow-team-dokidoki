@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { getCurrentUserProfile, signOut } from "@/features/auth/actions";
 import { SettingsScreen } from "@/features/users/components/settings-screen";
-import { getCurrentUserProfile } from "@/features/auth/actions";
+import { isSafeRedirectPath } from "@/lib/redirect-path";
 
 export default async function SettingsPage({
   searchParams,
@@ -19,7 +20,8 @@ export default async function SettingsPage({
         nickname: profile.nickname ?? "ゲスト",
         email: profile.email,
       }}
-      backHref={typeof from === "string" && from.startsWith("/") ? from : "/groups"}
+      backHref={typeof from === "string" && isSafeRedirectPath(from) ? from : "/groups"}
+      onLogout={signOut}
     />
   );
 }

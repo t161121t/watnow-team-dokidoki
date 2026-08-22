@@ -10,10 +10,17 @@ import {
 } from "@/lib/supabase/storage";
 import { createProfile } from "@/features/auth/server/create-profile";
 import { getProfile } from "@/features/auth/server/get-profile";
+import { isSafeRedirectPath } from "@/lib/redirect-path";
 
 // ログイン後に戻したいページ。省略時はコールバック側で"/"にする。
+// "//evil.example"のようなプロトコル相対URLはstartsWith("/")だけでは弾けず
+// オープンリダイレクトになるため、isSafeRedirectPathで検証する
+// （2026-08-22レビュー指摘。app/login/page.tsxの検証と同じ関数を使う）。
 const redirectToSchema = z.object({
-  redirectTo: z.string().startsWith("/").optional(),
+  redirectTo: z
+    .string()
+    .refine(isSafeRedirectPath, { message: "redirectTo must be an internal app path" })
+    .optional(),
 });
 
 const passwordSignInSchema = redirectToSchema.extend({

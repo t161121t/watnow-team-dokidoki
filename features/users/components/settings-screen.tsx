@@ -4,7 +4,6 @@ import { Avatar } from "@/components/ui/avatar";
 import { MockActionButton } from "@/components/ui/mock-action-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { neonButtonVariants } from "@/components/ui/neon-button";
-import { signOut } from "@/features/auth/actions";
 import { avatarToneFromUserId, initialsFromNickname } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 
@@ -36,9 +35,15 @@ function SettingRow({ label, value }: { label: string; value: string }) {
 export function SettingsScreen({
   user,
   backHref,
+  onLogout,
 }: {
   user: { id: string; nickname: string; email: string | null };
   backHref: string;
+  // authドメインのServer Action（signOut）はここではimportしない
+  // （features/<A>/componentsからfeatures/<B>/*への依存を作らないという
+  // ドメイン境界ルールに反するため。呼び出し元のapp/settings/page.tsxが
+  // 合成して渡す。2026-08-22レビュー指摘）。
+  onLogout: () => Promise<void>;
 }) {
   return (
     <MobileShell>
@@ -66,7 +71,7 @@ export function SettingsScreen({
         <SettingRow label="パスワード" value="••••••••••••" />
       </div>
 
-      <form action={signOut}>
+      <form action={onLogout}>
         <button
           type="submit"
           className={cn(neonButtonVariants({ variant: "danger", size: "lg" }), "mt-8 w-full")}
