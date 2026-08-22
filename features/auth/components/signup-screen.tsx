@@ -159,7 +159,7 @@ export function SignupScreen() {
             <span className="h-[1.5px] min-w-px flex-1 bg-[#b75ee3]" />
           </div>
 
-          <GoogleContinueButton href="/groups/join" />
+          <GoogleContinueButton redirectTo="/groups" />
 
           <p className="mt-6 flex items-start justify-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] leading-normal text-white [font-family:var(--font-noto-sans-jp)]">
             <span className="font-medium">アカウントをお持ちの方は</span>

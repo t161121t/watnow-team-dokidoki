@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { signInWithGoogle } from "@/features/auth/actions";
 
 const googleMark = (
   <svg
@@ -28,23 +28,43 @@ const googleMark = (
   </svg>
 );
 
-export function GoogleContinueButton({ href }: { href: string }) {
-  const router = useRouter();
+/**
+ * redirectTo: ログイン成功後に戻したいパス（"/"始まり）。省略時は
+ * signInWithGoogle側のデフォルト（コールバックが"/"に戻す）。
+ * PR #74時点ではモックのrouter.push(href)だったが、実際のGoogle認証
+ * （features/auth/actions.tsのsignInWithGoogle）に接続した（issue #72）。
+ */
+export function GoogleContinueButton({ redirectTo }: { redirectTo?: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
-    <button
-      type="button"
-      disabled={isSubmitting}
-      aria-busy={isSubmitting}
-      onClick={() => {
-        setIsSubmitting(true);
-        window.setTimeout(() => router.push(href), 450);
-      }}
-      className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white text-[15px] font-bold text-[#1f1f1f] shadow-[0_0_18px_rgba(255,255,255,0.12)] transition hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c038ff] focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-45 [font-family:var(--font-noto-sans-jp)]"
-    >
-      {googleMark}
-      {isSubmitting ? "接続中…" : "Googleで続ける"}
-    </button>
+    <div>
+      <button
+        type="button"
+        disabled={isSubmitting}
+        aria-busy={isSubmitting}
+        onClick={() => {
+          setError(null);
+          setIsSubmitting(true);
+          // signInWithGoogleは成功時にnext/navigationのredirect()でGoogleの
+          // 認可画面へ遷移させる（ブラウザが離脱するのでこのPromiseは解決しない）。
+          // エラー時のみここに戻ってくる。
+          signInWithGoogle({ redirectTo }).catch(() => {
+            setIsSubmitting(false);
+            setError("Googleログインを開始できませんでした");
+          });
+        }}
+        className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white text-[15px] font-bold text-[#1f1f1f] shadow-[0_0_18px_rgba(255,255,255,0.12)] transition hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c038ff] focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-45 [font-family:var(--font-noto-sans-jp)]"
+      >
+        {googleMark}
+        {isSubmitting ? "接続中…" : "Googleで続ける"}
+      </button>
+      {error ? (
+        <p className="mt-1.5 text-[13px] leading-normal font-bold text-[#ffb4c9]" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

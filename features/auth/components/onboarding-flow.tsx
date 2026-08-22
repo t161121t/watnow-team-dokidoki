@@ -139,7 +139,7 @@ export function LoginScreen() {
             <span className="h-[1.5px] min-w-px flex-1 bg-[#b75ee3]" />
           </div>
 
-          <GoogleContinueButton href={`/groups/${mockCurrentGroupId}`} />
+          <GoogleContinueButton redirectTo="/groups" />
 
           <p className="mt-3 flex items-start justify-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] leading-normal text-white [font-family:var(--font-noto-sans-jp)]">
             <span className="font-medium">アカウントをお持ちでない方は</span>
