@@ -30,15 +30,23 @@ export const mockChallenges: Challenge[] = [
   },
 ];
 
-export function getChallenge(challengeId: string): Challenge {
-  return (
-    mockChallenges.find((challenge) => challenge.id === challengeId) ??
-    mockChallenges[0]
-  );
+/**
+ * 存在しないchallengeIdの場合はnullを返す（呼び出し元のpage.tsxでnotFound()する
+ * 前提。以前は先頭要素にフォールバックしていたため、存在しないURLでも
+ * 別チャレンジが正常表示されてしまっていた。2026-08-22レビュー指摘）。
+ */
+export function getChallenge(challengeId: string): Challenge | null {
+  return mockChallenges.find((challenge) => challenge.id === challengeId) ?? null;
 }
 
+/**
+ * getChallengeと同じ前提（未知のIDにフォールバックしない）に揃える。
+ * 呼び出し元は先にgetChallengeでnotFound()判定を済ませてから呼ぶこと。
+ */
 export function getNextChallengeId(challengeId: string): string {
   const index = mockChallenges.findIndex((challenge) => challenge.id === challengeId);
-  const current = index >= 0 ? index : 0;
-  return mockChallenges[(current + 1) % mockChallenges.length].id;
+  if (index === -1) {
+    throw new Error(`getNextChallengeId: unknown challengeId "${challengeId}"`);
+  }
+  return mockChallenges[(index + 1) % mockChallenges.length].id;
 }

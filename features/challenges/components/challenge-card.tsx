@@ -32,9 +32,12 @@ export function ChallengeCard({
         <div className="min-w-0">
           <h3 className="font-bold">{challenge.title}</h3>
           <p className="mt-1 text-xs text-white/55">{challenge.description}</p>
-          <p className="mt-2 text-xs font-black text-[#e692ff]">
-            クリアで{challenge.reward}pt
-          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <p className="text-xs font-black text-[#e692ff]">
+              クリアで{challenge.reward}pt
+            </p>
+            <span className="text-[10px] text-white/38">{challenge.attemptsLabel}</span>
+          </div>
         </div>
         <span
           className={cn(
