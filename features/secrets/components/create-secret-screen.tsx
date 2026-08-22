@@ -22,11 +22,14 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<SecretCategory>("黒歴史");
   const [rarity, setRarity] = useState<1 | 2 | 3 | 4 | 5>(3);
-  const [value, setValue] = useState(200);
+  const [price, setPrice] = useState("");
+  const numericPrice = Number(price);
+  const isPriceValid = Number.isInteger(numericPrice) && numericPrice > 0;
   const canContinue =
     title.trim().length > 0 &&
     summary.trim().length > 0 &&
-    body.trim().length > 0;
+    body.trim().length > 0 &&
+    isPriceValid;
 
   return (
     <MobileShell>
@@ -118,15 +121,16 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
               />
             </div>
           </div>
-          <NeonField id="secret-value" label="秘密の価値">
+          <NeonField id="secret-price" label="秘密の価格">
             <NeonInput
-              id="secret-value"
+              id="secret-price"
               type="number"
-              min={50}
-              max={1000}
-              step={10}
-              value={value}
-              onChange={(event) => setValue(Number(event.target.value))}
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={price}
+              placeholder="価格を入力"
+              onChange={(event) => setPrice(event.target.value)}
             />
           </NeonField>
           <NeonButton
@@ -162,8 +166,8 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
                 <StarRating value={rarity} label="レア度" className="mt-1" />
               </div>
               <div>
-                <p className="text-white/38">価値</p>
-                <p className="mt-1 font-bold">{value.toLocaleString()}pt</p>
+                <p className="text-white/38">価格</p>
+                <p className="mt-1 font-bold">{numericPrice.toLocaleString()}pt</p>
               </div>
             </div>
           </NeonCard>
