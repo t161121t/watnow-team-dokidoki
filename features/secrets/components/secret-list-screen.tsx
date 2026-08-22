@@ -6,6 +6,7 @@ import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonLink } from "@/components/ui/neon-button";
+import { CreateSecretSheet } from "@/features/secrets/components/create-secret-sheet";
 import { SecretCard } from "@/features/secrets/components/secret-card";
 import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { listMySecrets } from "@/features/secrets/server/list-my-secrets";
@@ -35,10 +36,13 @@ export async function SecretListScreen({
   groupId,
   dealer,
   tab,
+  createOpen,
 }: {
   groupId: string;
   dealer: SecretListItem[];
   tab: SecretListTab;
+  /** 新規登録シート（⑦）を開くか。URLクエリ`?new=1`をpage.tsxが解釈した値 */
+  createOpen: boolean;
 }) {
   if (!z.string().uuid().safeParse(groupId).success) {
     notFound();
@@ -92,8 +96,14 @@ export async function SecretListScreen({
       <ScreenHeader
         title="秘密リスト"
         action={
+          // 新規登録シートはURLクエリ（?new=1）で開く。scroll={false}で一覧の
+          // スクロール位置を保ち、ブラウザバックでもシートを閉じられる
           <NeonLink
-            href={`/groups/${groupId}/secrets/new`}
+            href={{
+              pathname: `/groups/${groupId}/secrets`,
+              query: { tab, new: "1" },
+            }}
+            scroll={false}
             variant="secondary"
             size="sm"
           >
@@ -144,6 +154,7 @@ export async function SecretListScreen({
         items={getGroupNavigation(groupId)}
         active={tab === "collection" ? "me" : "secrets"}
       />
+      <CreateSecretSheet groupId={groupId} tab={tab} open={createOpen} />
     </MobileShell>
   );
 }
