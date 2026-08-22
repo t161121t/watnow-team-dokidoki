@@ -4,15 +4,24 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { BackButton } from "@/components/ui/back-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
+import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { getGroupNavigation } from "@/lib/navigation";
 import type { Secret } from "@/lib/types/secret";
 
-export function SecretViewerScreen({ secret }: { secret: Secret }) {
+export function SecretViewerScreen({
+  secret,
+  returnTab,
+}: {
+  secret: Secret;
+  returnTab: SecretListTab;
+}) {
+  const backHref = `/groups/${secret.groupId}/secrets?tab=${returnTab}`;
+
   return (
     <MobileShell withNavigation>
       <ScreenHeader
         title="秘密ビューワー"
-        backHref={`/groups/${secret.groupId}/secrets`}
+        backHref={backHref}
       />
 
       <h2 className="mb-5 text-center text-xl font-bold [text-shadow:0_0_12px_rgba(208,66,255,0.75)]">
@@ -58,7 +67,7 @@ export function SecretViewerScreen({ secret }: { secret: Secret }) {
       </NeonCard>
 
       <BackButton
-        href={`/groups/${secret.groupId}/secrets`}
+        href={backHref}
         aria-label="秘密リストへ戻る"
         className="mx-auto mt-6"
       />

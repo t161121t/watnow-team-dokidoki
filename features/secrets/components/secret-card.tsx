@@ -2,16 +2,26 @@ import Link from "next/link";
 
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
+import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import type { Secret } from "@/lib/types/secret";
 
-export function SecretCard({ secret }: { secret: Secret }) {
-  const href =
+export function SecretCard({
+  secret,
+  listTab,
+}: {
+  secret: Secret;
+  listTab: SecretListTab;
+}) {
+  const pathname =
     secret.viewRole === "winner"
       ? `/groups/${secret.groupId}/collection/${secret.id}`
       : `/groups/${secret.groupId}/secrets/${secret.id}`;
 
   return (
-    <Link href={href} className="group block focus-visible:outline-none">
+    <Link
+      href={{ pathname, query: { tab: listTab } }}
+      className="group block focus-visible:outline-none"
+    >
       <NeonCard className="p-4 transition group-hover:-translate-y-0.5 group-hover:border-[#dc64ff] group-focus-visible:ring-2 group-focus-visible:ring-[#c038ff]">
         {secret.remainingLabel ? (
           <div className="mb-3 text-right">
