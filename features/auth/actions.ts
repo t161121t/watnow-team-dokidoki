@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient, getCurrentUserId } from "@/lib/supabase/server";
 import {
@@ -9,10 +10,13 @@ import {
 } from "@/lib/supabase/storage";
 import { createProfile } from "@/features/auth/server/create-profile";
 
-const magicLinkSchema = z.object({
-  email: z.string().email(),
-  // ログイン後に戻したいページ。省略時はコールバック側で"/"にする。
+// ログイン後に戻したいページ。省略時はコールバック側で"/"にする。
+const redirectToSchema = z.object({
   redirectTo: z.string().startsWith("/").optional(),
+});
+
+const magicLinkSchema = redirectToSchema.extend({
+  email: z.string().email(),
 });
 
 /**
@@ -25,22 +29,44 @@ export async function signInWithMagicLink(input: {
   redirectTo?: string;
 }) {
   const parsed = magicLinkSchema.parse(input);
-  const origin = await resolveOrigin();
+  const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
   const supabase = await createSupabaseServerClient();
-
-  const callbackUrl = new URL("/auth/callback", origin);
-  if (parsed.redirectTo) {
-    callbackUrl.searchParams.set("redirect_to", parsed.redirectTo);
-  }
 
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.email,
-    options: { emailRedirectTo: callbackUrl.toString() },
+    options: { emailRedirectTo: callbackUrl },
   });
 
   if (error) {
     throw new Error("ログインリンクの送信に失敗しました");
   }
+}
+
+/**
+ * Googleでのサインイン/サインアップ（issue #72）。Magic Linkと同じく、
+ * 新規/既存の判定・auth.usersの作成はSupabase Auth側に任せる。public.usersの
+ * 作成はここでは行わない（オンボーディング完了時のcompleteProfileで行う。
+ * signInWithMagicLinkと同じ流れ）。
+ *
+ * signInWithOAuthはリダイレクト先URLを返すだけで自分ではリダイレクトしない
+ * （ブラウザの遷移が必要なため）。Server Action内でnext/navigationのredirect()
+ * を呼び、呼び出し元（フォームのaction等）はこの関数を直接呼べば良い。
+ */
+export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
+  const parsed = redirectToSchema.parse(input);
+  const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: callbackUrl },
+  });
+
+  if (error || !data.url) {
+    throw new Error("Googleログインの開始に失敗しました");
+  }
+
+  redirect(data.url);
 }
 
 export async function signOut() {
@@ -109,4 +135,14 @@ async function resolveOrigin() {
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const protocol = h.get("x-forwarded-proto") ?? "http";
   return `${protocol}://${host}`;
+}
+
+/** signInWithMagicLink/signInWithGoogle共通。app/auth/callback/route.tsへのURLを組み立てる。 */
+async function buildCallbackUrl(redirectTo?: string) {
+  const origin = await resolveOrigin();
+  const callbackUrl = new URL("/auth/callback", origin);
+  if (redirectTo) {
+    callbackUrl.searchParams.set("redirect_to", redirectTo);
+  }
+  return callbackUrl.toString();
 }
