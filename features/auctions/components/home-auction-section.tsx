@@ -25,7 +25,13 @@ export async function HomeAuctionSection({ groupId }: { groupId: string }) {
     getMyWinningAuctionIds(userId, groupId),
   ]);
   const winningSet = new Set(winningAuctionIds);
-  const auctions = rows.map((row) => toAuction(row, winningSet.has(row.auction_id)));
+  // getAuctionListはgroup内の全auction（完了済み・キャンセル済み含む）を
+  // ends_at ASCで返すため、statusで絞らずにslice(0, 2)すると終了済みの
+  // オークションが「開催中」に混ざり、実際にopen中のものが隠れてしまう
+  // （2026-08-23レビュー指摘）。
+  const auctions = rows
+    .filter((row) => row.status === "open")
+    .map((row) => toAuction(row, winningSet.has(row.auction_id)));
 
   return (
     <section className="mt-8">

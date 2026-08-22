@@ -1,19 +1,23 @@
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
-import { getMyDealerAuctions } from "@/features/auctions/actions";
 
 /**
  * グループホーム（⑥）の「ディーラー担当の秘密があります」バナー。
  * auctionsドメインのデータ（dealer_id=自分の案件）はここから直接読めない
- * ため、features/auctions/actions.ts経由で取得する（cross-domainのread
- * 唯一の許容経路。features/secrets/components/secret-list-screen.tsxの
- * dealerタブと同じ理由）。承認待ち（要対応）の案件がある時だけ表示する。
+ * ため（feature UI間のドメイン境界。2026-08-23レビュー指摘）、呼び出し元の
+ * app/groups/[groupId]/page.tsxでauctions側のreadを組み立て、承認待ちの
+ * secret_group_item_idだけをpropsで渡す（features/secrets/components/
+ * secret-list-screen.tsxのdealerタブと同じ、app/層で組み立てる方の
+ * cross-domainパターン）。
  */
-export async function DealerAssignmentCard({ groupId }: { groupId: string }) {
-  const auctions = await getMyDealerAuctions({ groupId });
-  const pending = auctions.find((auction) => auction.status === "pending_dealer_approval");
-
-  if (!pending) {
+export function DealerAssignmentCard({
+  groupId,
+  pendingSecretGroupItemId,
+}: {
+  groupId: string;
+  pendingSecretGroupItemId: string | null;
+}) {
+  if (!pendingSecretGroupItemId) {
     return null;
   }
 
@@ -22,7 +26,7 @@ export async function DealerAssignmentCard({ groupId }: { groupId: string }) {
       <p className="text-sm font-bold">ディーラー担当の秘密があります</p>
       <NeonLink
         href={{
-          pathname: `/groups/${groupId}/secrets/${pending.secret_group_item_id}`,
+          pathname: `/groups/${groupId}/secrets/${pendingSecretGroupItemId}`,
           query: { tab: "dealer" },
         }}
         variant="secondary"
