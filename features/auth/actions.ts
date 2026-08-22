@@ -70,8 +70,14 @@ export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
  * 届かなくなるため（2026-08-23、ユーザー報告を受けたfeatures/auctions/actions.ts
  * の同種の修正と同じ理由）。日本語文言はクライアント側の呼び出し元
  * コンポーネントで持つ。
+ *
+ * signInWithPassword/signUpWithPasswordは、入力不正もPromise rejectさせず
+ * statusで返す（features/auctions/actions.tsのPR #102レビュー指摘と同じ
+ * 理由）。新しいチェックを追加する際はzod .parse()（throw系）ではなく
+ * safeParse()でstatusを返すこと。
  */
 export type PasswordAuthErrorStatus =
+  | "invalid_input"
   | "email_not_confirmed"
   | "already_registered"
   | "invalid_credentials"
@@ -103,19 +109,21 @@ export async function signInWithPassword(input: {
   password: string;
   redirectTo?: string;
 }): Promise<SignInResult> {
-  const parsed = passwordSignInSchema.parse(input);
+  const parsed = passwordSignInSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase.auth.signInWithPassword({
-    email: parsed.email,
-    password: parsed.password,
+    email: parsed.data.email,
+    password: parsed.data.password,
   });
 
   if (error) {
     return { status: mapPasswordAuthErrorStatus(error.message) };
   }
 
-  redirect(parsed.redirectTo ?? "/groups");
+  redirect(parsed.data.redirectTo ?? "/groups");
 }
 
 export type SignUpResult = { status: "confirmation_required" } | { status: PasswordAuthErrorStatus };
@@ -138,15 +146,17 @@ export async function signUpWithPassword(input: {
   nickname: string;
   redirectTo?: string;
 }): Promise<SignUpResult> {
-  const parsed = passwordSignUpSchema.parse(input);
-  const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
+  const parsed = passwordSignUpSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
+  const callbackUrl = await buildCallbackUrl(parsed.data.redirectTo);
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase.auth.signUp({
-    email: parsed.email,
-    password: parsed.password,
+    email: parsed.data.email,
+    password: parsed.data.password,
     options: {
-      data: { nickname: parsed.nickname },
+      data: { nickname: parsed.data.nickname },
       emailRedirectTo: callbackUrl,
     },
   });
@@ -159,8 +169,17 @@ export async function signUpWithPassword(input: {
     return { status: "confirmation_required" };
   }
 
-  await createProfile(data.user.id, parsed.nickname, null);
-  redirect(parsed.redirectTo ?? "/groups");
+  // signUp自体は成功しているため（Supabase Auth側にユーザーは既に存在する）、
+  // ここでcreateProfileが失敗してもthrowせずstatusで返す（Codexレビュー指摘:
+  // ここをtry/catchで囲まないとPromiseがrejectし、isSubmittingが戻らず
+  // フォームが操作不能のまま固まってしまう）。
+  try {
+    await createProfile(data.user.id, parsed.data.nickname, null);
+  } catch {
+    return { status: "unknown_error" };
+  }
+
+  redirect(parsed.data.redirectTo ?? "/groups");
 }
 
 /** アカウント設定（⑮）でのログアウト。成功したらログイン画面へ戻す。 */

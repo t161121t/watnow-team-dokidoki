@@ -59,8 +59,15 @@ export async function getChallengeEvidenceSignedUrl(input: { path: string }) {
  * サニタイズされ、throwした日本語メッセージ自体がクライアントに届かなくなる
  * ため。2026-08-23、ユーザー報告を受けて発覚）。日本語文言はクライアント側の
  * 呼び出し元コンポーネントで持つ。
+ *
+ * submitChallenge/approveChallengeは、セッション切れ・入力不正もPromise
+ * rejectさせずstatusで返す（features/auctions/actions.tsのPR #102レビュー
+ * 指摘と同じ理由）。この2つに新しいチェックを追加する際はrequireUserId()や
+ * zod .parse()（throw系）ではなく、if文 + safeParse()でstatusを返すこと。
  */
 export type SubmitChallengeErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
   | "not_a_member"
   | "challenge_not_available"
   | "evidence_required"
@@ -96,11 +103,13 @@ export async function submitChallenge(input: {
   evidencePath?: string | null;
 }): Promise<SubmitChallengeResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = submitChallengeSchema.parse(input);
+  const parsed = submitChallengeSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    await submitChallengeInDb(userId, parsed.groupId, parsed.challengeId, parsed.evidencePath);
+    await submitChallengeInDb(userId, parsed.data.groupId, parsed.data.challengeId, parsed.data.evidencePath);
     return { status: "ok" };
   } catch (error) {
     return { status: mapSubmitChallengeErrorStatus(error instanceof Error ? error.message : "") };
@@ -108,6 +117,8 @@ export async function submitChallenge(input: {
 }
 
 export type ApproveChallengeErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
   | "attempt_not_found"
   | "not_authorized"
   | "cannot_review_own"
@@ -133,11 +144,13 @@ export async function approveChallenge(input: {
   decision: "approved" | "rejected";
 }): Promise<ApproveChallengeResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = approveChallengeSchema.parse(input);
+  const parsed = approveChallengeSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    await approveChallengeInDb(userId, parsed.attemptId, parsed.decision);
+    await approveChallengeInDb(userId, parsed.data.attemptId, parsed.data.decision);
     return { status: "ok" };
   } catch (error) {
     return { status: mapApproveChallengeErrorStatus(error instanceof Error ? error.message : "") };

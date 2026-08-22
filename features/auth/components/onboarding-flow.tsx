@@ -40,18 +40,26 @@ export function LoginScreen({ redirectTo = "/groups" }: { redirectTo?: string } 
   const submitLogin = async (values: LoginInput) => {
     setSubmitError(null);
     setIsSubmitting(true);
-    // 成功時はsignInWithPassword内でredirect()するため、このPromiseは解決しない
-    // （ブラウザが遷移する）。エラー時のみここに戻ってくる。throw/error.message
-    // の文字列比較には依存しない（本番ビルドではServer Actionのエラー
-    // メッセージがサニタイズされ判定できなくなるため。2026-08-23、
-    // features/auctions/actions.tsの同種の修正と同じ理由）。
-    const result = await signInWithPassword({
-      email: values.email,
-      password: values.password,
-      redirectTo,
-    });
-    setIsSubmitting(false);
-    setSubmitError(PASSWORD_AUTH_ERROR_MESSAGES[result.status]);
+    try {
+      // 成功時はsignInWithPassword内でredirect()するため、このPromiseは
+      // 解決しない（ブラウザが遷移する）。エラー時のみここに戻ってくる。
+      // throw/error.messageの文字列比較には依存しない（本番ビルドでは
+      // Server Actionのエラーメッセージがサニタイズされ判定できなくなる
+      // ため。2026-08-23、features/auctions/actions.tsの同種の修正と
+      // 同じ理由）。signInWithPasswordは例外を投げず戻り値のstatusで
+      // 失敗理由を表現する（入力不正も含む）。
+      const result = await signInWithPassword({
+        email: values.email,
+        password: values.password,
+        redirectTo,
+      });
+      setSubmitError(PASSWORD_AUTH_ERROR_MESSAGES[result.status]);
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setSubmitError("通信エラーが発生しました。もう一度お試しください");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
