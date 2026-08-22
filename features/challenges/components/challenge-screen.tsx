@@ -9,6 +9,7 @@ import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
 import { ChallengeCard } from "@/features/challenges/components/challenge-card";
 import type { ChallengeListItem } from "@/features/challenges/components/challenge-card";
+import { CooldownRefresher } from "@/features/challenges/components/cooldown-refresher";
 import { computeChallengeState } from "@/features/challenges/cooldown";
 import { getGroupChallengeAttempts } from "@/features/challenges/server/get-group-challenge-attempts";
 import { getGroupChallenges } from "@/features/challenges/server/get-group-challenges";
@@ -56,21 +57,29 @@ export async function ChallengeScreen({
     attemptsByChallenge.set(attempt.challengeId, list);
   }
 
-  const items: ChallengeListItem[] = challenges.map((challenge) => {
+  const challengeStates = challenges.map((challenge) => {
     const lastAttempt = attemptsByChallenge.get(challenge.id)?.[0];
-    const { state, cooldownLabel } = computeChallengeState(
-      lastAttempt,
-      challenge.cooldownSeconds,
-    );
-    return {
+    return { challenge, ...computeChallengeState(lastAttempt, challenge.cooldownSeconds) };
+  });
+
+  const items: ChallengeListItem[] = challengeStates.map(
+    ({ challenge, state, cooldownLabel }) => ({
       id: challenge.id,
       title: challenge.title,
       description: challenge.description,
       reward: challenge.rewardPoints,
       state,
       cooldownLabel,
-    };
-  });
+    }),
+  );
+
+  const cooldownUntils = challengeStates
+    .map(({ cooldownUntil }) => cooldownUntil)
+    .filter((until) => until !== null);
+  const earliestCooldownUntil =
+    cooldownUntils.length > 0
+      ? new Date(Math.min(...cooldownUntils.map((until) => until.getTime())))
+      : null;
 
   const recentHistory = myAttempts.slice(0, 5);
 
@@ -118,6 +127,7 @@ export async function ChallengeScreen({
         </section>
       ) : null}
 
+      <CooldownRefresher cooldownUntil={earliestCooldownUntil?.toISOString() ?? null} />
       <BottomNavigation items={getGroupNavigation(groupId)} active="challenges" />
     </MobileShell>
   );

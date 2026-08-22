@@ -121,7 +121,24 @@ async function main() {
     "submit_challenge: 証跡必須チャレンジはevidence_path無しで挑戦できない",
   );
 
-  const attemptC = await submitChallenge(submitter, groupId, challengeC.id, "evidence.jpg");
+  // 2026-08-23レビュー指摘: p_evidence_pathは提出者本人のフォルダ配下かつ
+  // challenge-evidenceバケットに実在する行のみ受け付ける
+  // （prisma/sql/challenges/002_submit_and_review.sql参照）。
+  await assertRejects(
+    () => submitChallenge(submitter, groupId, challengeC.id, `${reviewer}/spoofed.png`),
+    "submit_challenge: 他人のフォルダのevidence_pathは受け付けない",
+  );
+  await assertRejects(
+    () => submitChallenge(submitter, groupId, challengeC.id, `${submitter}/does-not-exist.png`),
+    "submit_challenge: 実在しないevidence_pathは受け付けない",
+  );
+
+  const evidencePathC = `${submitter}/${crypto.randomUUID()}.jpg`;
+  await withRlsContext(submitter, (tx) => tx.$executeRaw`
+    INSERT INTO storage.objects (bucket_id, name) VALUES ('challenge-evidence', ${evidencePathC})
+  `);
+
+  const attemptC = await submitChallenge(submitter, groupId, challengeC.id, evidencePathC);
   assert(attemptC.status === "pending", "submit_challenge: 証跡付きなら挑戦できる（status=pending）");
 
   const attempt1A = await submitChallenge(submitter, groupId, challengeA.id, null);

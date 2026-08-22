@@ -6,6 +6,7 @@ import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonLink } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
+import { CooldownRefresher } from "@/features/challenges/components/cooldown-refresher";
 import { computeChallengeState } from "@/features/challenges/cooldown";
 import { getGroupChallengeAttempts } from "@/features/challenges/server/get-group-challenge-attempts";
 import { getGroupChallenges } from "@/features/challenges/server/get-group-challenges";
@@ -49,7 +50,10 @@ export async function ChallengeDetailScreen({
   }
 
   const lastAttempt = myAttempts.find((attempt) => attempt.challengeId === challengeId);
-  const { state, cooldownLabel } = computeChallengeState(lastAttempt, challenge.cooldownSeconds);
+  const { state, cooldownLabel, cooldownUntil } = computeChallengeState(
+    lastAttempt,
+    challenge.cooldownSeconds,
+  );
   const canChallenge = state === "available";
 
   const listHref = `/groups/${groupId}/challenges`;
@@ -89,6 +93,9 @@ export async function ChallengeDetailScreen({
           戻る
         </NeonLink>
       </div>
+      {state === "cooldown" ? (
+        <CooldownRefresher cooldownUntil={cooldownUntil?.toISOString() ?? null} />
+      ) : null}
       <BottomNavigation items={getGroupNavigation(groupId)} active="challenges" />
     </MobileShell>
   );
