@@ -1,9 +1,10 @@
 /**
  * prisma/sql/groups/*.sql のうち、scripts/verify-rls.mts でカバーしていない
- * search_users/decline_invite/leave_group/update_group_member_role/
- * kick_group_member、および「最後のadminは操作できない」系のガードを実DBに対して
- * 検証する。Vitest等の自動テストは未導入（技術選定.md参照）のため、暫定的に
- * ここに置く。
+ * create_group_invite_link/revoke_group_invite_link/join_group_via_invite_link
+ * （issue #71、旧search_users/invite_member/accept_invite/decline_inviteの後継）、
+ * leave_group/update_group_member_role/kick_group_member、および「最後のadminは
+ * 操作できない」系のガードを実DBに対して検証する。Vitest等の自動テストは未導入
+ * （技術選定.md参照）のため、暫定的にここに置く。
  *
  * 他のverifyスクリプトと同様、RPCは`withRlsContext`経由の生SQLで直接叩く
  * （`features/groups/server/*`は`server-only`が付いておりNext.jsのバンドラー
@@ -16,7 +17,7 @@ import "dotenv/config";
 import { Client } from "pg";
 import { prisma } from "@/lib/prisma";
 import { withRlsContext } from "@/lib/db/rls";
-import type { UserSearchResultRow } from "@/features/groups/types";
+import type { GroupInviteLinkRow, GroupMemberRow } from "@/features/groups/types";
 
 /**
  * groups行への`FOR UPDATE`ロック（prisma/sql/groups/006_membership_lifecycle.sql）が
@@ -110,51 +111,78 @@ async function main() {
     tx.$queryRaw<{ id: string }[]>`SELECT * FROM create_group('Verify Groups Test', NULL)`,
   );
 
-  // --- search_users ---
-  const found = await withRlsContext(userA, (tx) =>
-    tx.$queryRaw<UserSearchResultRow[]>`SELECT * FROM search_users(${group.id}::uuid, 'VerifyGroups')`,
-  );
-  assert(
-    found.some((u) => u.id === userB) && found.some((u) => u.id === userC),
-    "search_users: 未招待ユーザーが検索結果に含まれる",
+  // --- create_group_invite_link / revoke_group_invite_link: admin以外は拒否 ---
+  await assertRejects(
+    () =>
+      withRlsContext(userB, (tx) =>
+        tx.$queryRaw`SELECT * FROM create_group_invite_link(${group.id}::uuid)`,
+      ),
+    "create_group_invite_link: admin以外は拒否される",
   );
   await assertRejects(
     () =>
-      withRlsContext(userA, (tx) =>
-        tx.$queryRaw`SELECT * FROM search_users(${group.id}::uuid, 'a')`,
+      withRlsContext(userB, (tx) =>
+        tx.$executeRaw`SELECT revoke_group_invite_link(${group.id}::uuid)`,
       ),
-    "search_users: 1文字クエリは拒否される（RPC内チェック）",
+    "revoke_group_invite_link: admin以外は拒否される",
   );
 
-  // --- invite_member / accept_invite / decline_invite ---
+  // --- create_group_invite_link: 発行、再発行で旧コードが無効化される ---
+  const [link1] = await withRlsContext(userA, (tx) =>
+    tx.$queryRaw<GroupInviteLinkRow[]>`SELECT * FROM create_group_invite_link(${group.id}::uuid)`,
+  );
+  assert(link1.group_id === group.id, "create_group_invite_link: 発行できる");
+
+  const [link2] = await withRlsContext(userA, (tx) =>
+    tx.$queryRaw<GroupInviteLinkRow[]>`SELECT * FROM create_group_invite_link(${group.id}::uuid)`,
+  );
+  assert(
+    link2.code !== link1.code,
+    "create_group_invite_link: 再発行すると別コードになる（upsert）",
+  );
+  await assertRejects(
+    () =>
+      withRlsContext(userB, (tx) =>
+        tx.$queryRaw`SELECT * FROM join_group_via_invite_link(${link1.code})`,
+      ),
+    "join_group_via_invite_link: 再発行前の旧コードは無効になる",
+  );
+
+  // --- join_group_via_invite_link: 無効なコードは拒否される ---
+  await assertRejects(
+    () =>
+      withRlsContext(userB, (tx) =>
+        tx.$queryRaw`SELECT * FROM join_group_via_invite_link('this-code-does-not-exist')`,
+      ),
+    "join_group_via_invite_link: 存在しないコードは拒否される",
+  );
+
+  // --- join_group_via_invite_link: 新規参加（userB/C/D/E） ---
   for (const target of [userB, userC, userD, userE]) {
-    await withRlsContext(userA, (tx) =>
-      tx.$executeRaw`SELECT invite_member(${group.id}::uuid, ${target}::uuid)`,
+    const [joined] = await withRlsContext(target, (tx) =>
+      tx.$queryRaw<GroupMemberRow[]>`SELECT * FROM join_group_via_invite_link(${link2.code})`,
+    );
+    assert(
+      joined.status === "active" && joined.joined_at !== null,
+      `join_group_via_invite_link: ${target} が直接activeで参加できる`,
     );
   }
-  await withRlsContext(userB, (tx) => tx.$executeRaw`SELECT accept_invite(${group.id}::uuid)`);
-  await withRlsContext(userC, (tx) => tx.$executeRaw`SELECT decline_invite(${group.id}::uuid)`);
-  await withRlsContext(userD, (tx) => tx.$executeRaw`SELECT accept_invite(${group.id}::uuid)`);
-  await withRlsContext(userE, (tx) => tx.$executeRaw`SELECT accept_invite(${group.id}::uuid)`);
-
-  const afterInvites = await withRlsContext(userA, (tx) =>
-    tx.$queryRaw<UserSearchResultRow[]>`SELECT * FROM search_users(${group.id}::uuid, 'VerifyGroups')`,
-  );
-  assert(
-    !afterInvites.some((u) => u.id === userB) &&
-      !afterInvites.some((u) => u.id === userD) &&
-      !afterInvites.some((u) => u.id === userE),
-    "search_users: 参加済みメンバーは検索結果から除外される",
-  );
-  assert(
-    afterInvites.some((u) => u.id === userC),
-    "search_users: declineしたユーザーは再度検索結果に出てくる（membershipが残らない）",
-  );
-
-  const declinedMember = await prisma.groupMember.findUnique({
-    where: { groupId_userId: { groupId: group.id, userId: userC } },
+  const newMemberWallet = await prisma.wallet.findUnique({
+    where: { groupId_userId: { groupId: group.id, userId: userB } },
   });
-  assert(declinedMember === null, "decline_invite: group_members行が削除される");
+  assert(
+    newMemberWallet !== null && newMemberWallet.balance === 0,
+    "join_group_via_invite_link: 新規参加時にwalletが作成される（balance=0）",
+  );
+
+  // --- join_group_via_invite_link: 既にactiveなら二重参加エラーにせずno-op ---
+  const [rejoinNoop] = await withRlsContext(userB, (tx) =>
+    tx.$queryRaw<GroupMemberRow[]>`SELECT * FROM join_group_via_invite_link(${link2.code})`,
+  );
+  assert(
+    rejoinNoop.status === "active",
+    "join_group_via_invite_link: 既にactiveなユーザーはno-opで成功する（二重参加エラーにしない）",
+  );
 
   // --- update_group_member_role ---
   await withRlsContext(userA, (tx) =>
@@ -195,6 +223,29 @@ async function main() {
   });
   assert(left?.status === "left", "leave_group: statusがleftになる");
 
+  // --- join_group_via_invite_link: 脱退後の再参加でwalletのbalanceが0にリセットされる ---
+  // （直接RPCでbalanceを動かす経路がないため、テストのセットアップとしてのみ
+  // prisma経由で直接balanceを書き換える。他のverifyスクリプトと同じパターン
+  // [scripts/verify-wallet.mts参照]）
+  await prisma.wallet.update({
+    where: { groupId_userId: { groupId: group.id, userId: userB } },
+    data: { balance: 500 },
+  });
+  const [rejoined] = await withRlsContext(userB, (tx) =>
+    tx.$queryRaw<GroupMemberRow[]>`SELECT * FROM join_group_via_invite_link(${link2.code})`,
+  );
+  assert(
+    rejoined.status === "active" && rejoined.left_at === null,
+    "join_group_via_invite_link: 脱退後も再参加でactiveに戻る",
+  );
+  const rejoinedWallet = await prisma.wallet.findUnique({
+    where: { groupId_userId: { groupId: group.id, userId: userB } },
+  });
+  assert(
+    rejoinedWallet !== null && rejoinedWallet.balance === 0 && rejoinedWallet.expiredAt === null,
+    "join_group_via_invite_link: 再参加時にwallet balanceが0にリセットされる（ポイント非持ち越し）",
+  );
+
   // --- 最後のadminは降格/kick/脱退できない（userA, userDの2admin中1人を先に落とす） ---
   await withRlsContext(userA, (tx) =>
     tx.$executeRaw`SELECT update_group_member_role(${group.id}::uuid, ${userD}::uuid, 'member'::member_role)`,
@@ -211,6 +262,35 @@ async function main() {
     "update_group_member_role: 最後のadminは降格できない",
   );
 
+  // --- group_invite_links RLS: adminのみselect可 ---
+  const linkAsAdmin = await withRlsContext(userA, (tx) =>
+    tx.groupInviteLink.findUnique({ where: { groupId: group.id } }),
+  );
+  assert(linkAsAdmin !== null, "group_invite_links: adminは招待リンクをselectできる");
+  const linkAsMember = await withRlsContext(userC, (tx) =>
+    tx.groupInviteLink.findUnique({ where: { groupId: group.id } }),
+  );
+  assert(
+    linkAsMember === null,
+    "group_invite_links: admin以外はRLSでselectできない（null）",
+  );
+
+  // --- revoke_group_invite_link: 取り消し後は行が消え、旧コードは無効になる ---
+  await withRlsContext(userA, (tx) =>
+    tx.$executeRaw`SELECT revoke_group_invite_link(${group.id}::uuid)`,
+  );
+  const linkAfterRevoke = await prisma.groupInviteLink.findUnique({
+    where: { groupId: group.id },
+  });
+  assert(linkAfterRevoke === null, "revoke_group_invite_link: 行が削除される");
+  await assertRejects(
+    () =>
+      withRlsContext(userC, (tx) =>
+        tx.$queryRaw`SELECT * FROM join_group_via_invite_link(${link2.code})`,
+      ),
+    "join_group_via_invite_link: 取り消し済みのコードは無効になる",
+  );
+
   // --- 「最後のadmin」ガードの競合ケース（レビュー指摘: 2026-08-19） ---
   // leave_group/update_group_member_role/kick_group_memberは「他にadminが
   // count(*)人いる」を確認してから別行を更新するため、admin A/Bが同時に
@@ -222,10 +302,12 @@ async function main() {
   const [raceGroup] = await withRlsContext(userF, (tx) =>
     tx.$queryRaw<{ id: string }[]>`SELECT * FROM create_group('Verify Groups Race Test', NULL)`,
   );
-  await withRlsContext(userF, (tx) =>
-    tx.$executeRaw`SELECT invite_member(${raceGroup.id}::uuid, ${userG}::uuid)`,
+  const [raceLink] = await withRlsContext(userF, (tx) =>
+    tx.$queryRaw<GroupInviteLinkRow[]>`SELECT * FROM create_group_invite_link(${raceGroup.id}::uuid)`,
   );
-  await withRlsContext(userG, (tx) => tx.$executeRaw`SELECT accept_invite(${raceGroup.id}::uuid)`);
+  await withRlsContext(userG, (tx) =>
+    tx.$queryRaw`SELECT * FROM join_group_via_invite_link(${raceLink.code})`,
+  );
   await withRlsContext(userF, (tx) =>
     tx.$executeRaw`SELECT update_group_member_role(${raceGroup.id}::uuid, ${userG}::uuid, 'admin'::member_role)`,
   );
@@ -263,6 +345,9 @@ main()
   .finally(async () => {
     await prisma.walletLedger.deleteMany({ where: { userId: { in: allUsers } } });
     await prisma.wallet.deleteMany({ where: { userId: { in: allUsers } } });
+    await prisma.groupInviteLink.deleteMany({
+      where: { createdBy: { in: [userA, userF] } },
+    });
     await prisma.groupMember.deleteMany({ where: { userId: { in: allUsers } } });
     await prisma.group.deleteMany({ where: { createdBy: { in: [userA, userF] } } });
     await prisma.user.deleteMany({ where: { id: { in: allUsers } } });
