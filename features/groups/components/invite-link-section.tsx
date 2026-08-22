@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
@@ -25,10 +25,21 @@ export function InviteLinkSection({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const inviteUrl =
-    code && typeof window !== "undefined"
-      ? `${window.location.origin}/groups/join/${code}`
-      : null;
+  // origin はマウント後にのみ確定させる。renderで直接typeof windowを見ると
+  // SSR（undefined）と初回クライアントrender（defined）でtree構造が変わり
+  // hydration mismatchになる（2026-08-22レビュー指摘）。表示するUI（カード or
+  // ボタン）自体はcodeの有無だけで決め、URL文字列だけがoriginを待つ形にする。
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    // window（ブラウザのみ存在する外部値）をマウント後に同期する、
+    // react-hooks/set-state-in-effectが許容する想定内のユースケース
+    // （SSR時点では原理的に取得できない値のため、render中に読むとhydration
+    // mismatchになる。上のコメント・2026-08-22レビュー指摘参照）。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(window.location.origin);
+  }, []);
+
+  const inviteUrl = code && origin ? `${origin}/groups/join/${code}` : null;
 
   const handleCreate = async () => {
     setError(null);
@@ -70,14 +81,14 @@ export function InviteLinkSection({
   return (
     <section className="mt-7 space-y-4">
       <h2 className="text-lg font-bold">招待URL</h2>
-      {inviteUrl ? (
+      {code ? (
         <NeonCard className="space-y-3 p-4">
-          <p className="truncate text-xs text-white/70">{inviteUrl}</p>
+          <p className="truncate text-xs text-white/70">{inviteUrl ?? "読み込み中…"}</p>
           <div className="grid grid-cols-2 gap-2.5">
             <NeonButton
               variant="quiet"
               size="sm"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !inviteUrl}
               onClick={handleCopy}
             >
               {copied ? "コピーしました" : "コピー"}

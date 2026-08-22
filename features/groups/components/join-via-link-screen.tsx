@@ -21,18 +21,22 @@ export function JoinViaLinkScreen({ code }: { code: string }) {
   const handleJoin = async () => {
     setError(null);
     setIsSubmitting(true);
-    try {
-      const member = await joinGroupViaInviteLink({ code });
-      router.push(`/groups/${member.group_id}`);
-    } catch (e) {
-      setIsSubmitting(false);
-      const message = e instanceof Error ? e.message : "参加に失敗しました";
-      if (message === "ログインが必要です") {
-        router.push(`/login?redirect_to=${encodeURIComponent(`/groups/join/${code}`)}`);
-        return;
-      }
-      setError(message);
+    // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+    // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+    // 2026-08-22レビュー指摘）。joinGroupViaInviteLinkは例外を投げず、
+    // 戻り値のstatusで未ログイン/無効コード/成功を表現する。
+    const result = await joinGroupViaInviteLink({ code });
+
+    if (result.status === "unauthenticated") {
+      router.push(`/login?redirect_to=${encodeURIComponent(`/groups/join/${code}`)}`);
+      return;
     }
+    if (result.status === "invalid_code") {
+      setIsSubmitting(false);
+      setError("この招待リンクは無効です（取り消されたか、URLが間違っている可能性があります）");
+      return;
+    }
+    router.push(`/groups/${result.groupId}`);
   };
 
   return (

@@ -1,3 +1,6 @@
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
+
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
@@ -11,23 +14,39 @@ import {
   avatarToneFromUserId,
   initialsFromNickname,
 } from "@/features/groups/member-avatar";
+import { getGroup } from "@/features/groups/server/get-group";
+import { getInviteLink } from "@/features/groups/server/get-invite-link";
+import { listGroupMembers } from "@/features/groups/server/list-group-members";
 import { getGroupNavigation } from "@/lib/navigation";
+import { getCurrentUserId } from "@/lib/supabase/server";
 
-export type ManageScreenMember = {
-  userId: string;
-  nickname: string;
-  role: "member" | "admin";
-};
+/**
+ * グループ管理（⑤）画面。読み取り専用データは自分でserver/を直接呼んで
+ * 取得する（docs/アーキテクチャ.md §1.1a: RSCのreadはactions.tsを経由しない。
+ * 2026-08-22レビュー指摘で、page.tsx側でactions.ts経由になっていたものを
+ * ここに移した）。groupIdはグループ一覧/ホーム側がまだモックデータのままで
+ * UUIDでないIDを渡してくることがあるため、ここで先に弾いて404にする。
+ */
+export async function GroupManageScreen({ groupId }: { groupId: string }) {
+  if (!z.string().uuid().safeParse(groupId).success) {
+    notFound();
+  }
 
-export function GroupManageScreen({
-  group,
-  members,
-  inviteLinkCode,
-}: {
-  group: { id: string; name: string; iconPath: string | null };
-  members: ManageScreenMember[];
-  inviteLinkCode: string | null;
-}) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    redirect(`/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/manage`)}`);
+  }
+
+  const [group, members, inviteLink] = await Promise.all([
+    getGroup(userId, groupId),
+    listGroupMembers(userId, groupId),
+    getInviteLink(userId, groupId),
+  ]);
+
+  if (!group) {
+    notFound();
+  }
+
   return (
     <MobileShell withNavigation>
       <ScreenHeader title="グループ管理" backHref={`/groups/${group.id}`} />
@@ -51,12 +70,12 @@ export function GroupManageScreen({
           {members.map((member) => (
             <NeonCard key={member.userId} className="flex items-center gap-3 p-3.5">
               <Avatar
-                initials={initialsFromNickname(member.nickname)}
+                initials={initialsFromNickname(member.user.nickname)}
                 tone={avatarToneFromUserId(member.userId)}
                 className="size-10"
               />
               <p className="min-w-0 flex-1 truncate text-sm font-bold">
-                {member.nickname}
+                {member.user.nickname}
               </p>
               {member.role === "admin" ? (
                 <span className="rounded-full bg-[#c038ff]/16 px-2 py-1 text-[9px] font-bold text-[#efb4ff]">
@@ -68,7 +87,7 @@ export function GroupManageScreen({
         </div>
       </section>
 
-      <InviteLinkSection groupId={group.id} initialCode={inviteLinkCode} />
+      <InviteLinkSection groupId={group.id} initialCode={inviteLink?.code ?? null} />
 
       {/*
         グループ設定（名前変更・オークション開放時間変更・削除）は対応する

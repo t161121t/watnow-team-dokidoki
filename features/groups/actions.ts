@@ -7,13 +7,10 @@ import {
   createAvatarUploadUrl,
 } from "@/lib/supabase/storage";
 import { createGroup as createGroupInDb } from "@/features/groups/server/create-group";
-import { getGroup as getGroupInDb } from "@/features/groups/server/get-group";
 import { getMyGroups as getMyGroupsInDb } from "@/features/groups/server/get-my-groups";
-import { listGroupMembers as listGroupMembersInDb } from "@/features/groups/server/list-group-members";
 import { createInviteLink as createInviteLinkInDb } from "@/features/groups/server/create-invite-link";
 import { revokeInviteLink as revokeInviteLinkInDb } from "@/features/groups/server/revoke-invite-link";
 import { joinViaInviteLink as joinViaInviteLinkInDb } from "@/features/groups/server/join-via-invite-link";
-import { getInviteLink as getInviteLinkInDb } from "@/features/groups/server/get-invite-link";
 import { leaveGroup as leaveGroupInDb } from "@/features/groups/server/leave-group";
 import { updateGroupMemberRole as updateGroupMemberRoleInDb } from "@/features/groups/server/update-group-member-role";
 import { kickGroupMember as kickGroupMemberInDb } from "@/features/groups/server/kick-group-member";
@@ -77,27 +74,6 @@ export async function getMyGroups() {
 const groupIdSchema = z.object({ groupId: z.string().uuid() });
 
 /**
- * グループ管理（⑤）・ホーム（⑥）等での単一グループ取得。所属していない
- * グループの場合はnullが返る（RLS。groups_select_member）。
- */
-export async function getGroup(input: { groupId: string }) {
-  const userId = await getCurrentUserId();
-  requireUserId(userId);
-
-  const parsed = groupIdSchema.parse(input);
-  return getGroupInDb(userId, parsed.groupId);
-}
-
-/** グループ管理（⑤）でのメンバー一覧。 */
-export async function getGroupMembers(input: { groupId: string }) {
-  const userId = await getCurrentUserId();
-  requireUserId(userId);
-
-  const parsed = groupIdSchema.parse(input);
-  return listGroupMembersInDb(userId, parsed.groupId);
-}
-
-/**
  * グループ管理（⑤）での招待URL発行/再発行（issue #71）。既存リンクがある場合は
  * コードを再発行し、旧リンクは自動的に無効化される（create_group_invite_link
  * RPCのupsert）。admin確認はRPC側が行う。
@@ -119,32 +95,40 @@ export async function revokeGroupInviteLink(input: { groupId: string }) {
   return revokeInviteLinkInDb(userId, parsed.groupId);
 }
 
-/** グループ管理（⑤）で現在有効な招待URLのコードを取得する。 */
-export async function getInviteLink(input: { groupId: string }) {
-  const userId = await getCurrentUserId();
-  requireUserId(userId);
-
-  const parsed = groupIdSchema.parse(input);
-  return getInviteLinkInDb(userId, parsed.groupId);
-}
-
 const joinViaInviteLinkSchema = z.object({ code: z.string().min(1) });
+
+export type JoinViaInviteLinkResult =
+  | { status: "unauthenticated" }
+  | { status: "invalid_code" }
+  | { status: "ok"; groupId: string };
 
 /**
  * 招待URLでのグループ参加（issue #71）。新規参加・再参加のいずれもRPC
- * （join_group_via_invite_link）側で処理する。RPCのRAISE
- * EXCEPTIONはPrismaの生SQLエラーとして技術的なメッセージ（P0001等）で
- * 返ってくるため、UI表示用に丸める。
+ * （join_group_via_invite_link）側で処理する。
+ *
+ * 未ログイン・無効なコードは例外throwではなく戻り値のstatusで表現する
+ * （2026-08-22レビュー指摘）。本番ビルドではServer Actionからthrowされた
+ * エラーのmessageはNext.jsによってサニタイズされ、クライアント側で
+ * `error.message === "ログインが必要です"`のような文字列比較に依存すると
+ * 判定できなくなる。招待URLからの参加は未ログインが主要な入口のため、
+ * ここは戻り値ベースにして呼び出し元（join-via-link-screen.tsx）が
+ * 分岐する形にした。RPCのRAISE EXCEPTIONもPrismaの生SQLエラーとして
+ * 技術的なメッセージ（P0001等）で返ってくるため、statusに丸める。
  */
-export async function joinGroupViaInviteLink(input: { code: string }) {
+export async function joinGroupViaInviteLink(input: {
+  code: string;
+}): Promise<JoinViaInviteLinkResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) {
+    return { status: "unauthenticated" };
+  }
 
   const parsed = joinViaInviteLinkSchema.parse(input);
   try {
-    return await joinViaInviteLinkInDb(userId, parsed.code);
+    const member = await joinViaInviteLinkInDb(userId, parsed.code);
+    return { status: "ok", groupId: member.group_id };
   } catch {
-    throw new Error("この招待リンクは無効です（取り消されたか、URLが間違っている可能性があります）");
+    return { status: "invalid_code" };
   }
 }
 
