@@ -1,13 +1,33 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
 
 import { getAnonymousBidFeed, getAuction } from "@/features/auctions/actions";
 import { AuctionRoomScreen } from "@/features/auctions/components/auction-room-screen";
+import { getAuthenticatedUserId } from "@/features/auth/actions";
 import { WalletBalance } from "@/features/wallet/components/wallet-balance";
 
 export default async function AuctionRoomPage({
   params,
 }: PageProps<"/groups/[groupId]/auctions/[auctionId]">) {
   const { groupId, auctionId } = await params;
+
+  if (
+    !z.string().uuid().safeParse(groupId).success ||
+    !z.string().uuid().safeParse(auctionId).success
+  ) {
+    notFound();
+  }
+
+  // app/層はlib/supabase/serverを直接importできない（ESLint boundaries）
+  // ため、features/auth/actions.tsのgetAuthenticatedUserIdでログイン確認
+  // してから、getAuction/getAnonymousBidFeedを呼ぶ（app/groups/[groupId]/
+  // page.tsxと同じ理由。2026-08-23レビュー指摘）。
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    redirect(
+      `/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/auctions/${auctionId}`)}`,
+    );
+  }
 
   const [auction, bidFeed] = await Promise.all([
     getAuction({ auctionId }),

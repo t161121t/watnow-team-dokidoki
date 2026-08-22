@@ -203,6 +203,18 @@ export async function completeProfile(input: {
 }
 
 /**
+ * ログイン済みユーザーのuserIdを返す。未ログインならnull（例外にしない）。
+ * app/層は`lib/supabase/server`を直接importできない（ESLint boundaries）
+ * ため、app/層のページで「ログイン確認してから先の処理に進む」ガードを
+ * 書く時はこれを使う。エラーメッセージの文字列比較で認証状態を判定する
+ * のは、呼び出し先の実装やメッセージ文言が変わるだけで壊れる脆いAPI契約
+ * になるため避ける（2026-08-23レビュー指摘）。
+ */
+export async function getAuthenticatedUserId(): Promise<string | null> {
+  return getCurrentUserId();
+}
+
+/**
  * アカウント設定（⑮）・マイページ（⑭）での本人プロフィール表示用。
  * emailはauth.usersにしか無い（public.usersに複製していない）ため、
  * getProfile（public.users）とSupabase Authのgetterを両方呼んで合成する。
