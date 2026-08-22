@@ -4,13 +4,12 @@ import { NeonLink } from "@/components/ui/neon-button";
 import { GroupCard } from "@/features/groups/components/group-card";
 import type { Group } from "@/lib/types/group";
 
-export function GroupSwitcherScreen({
-  groups,
-  invitationCount,
-}: {
-  groups: Group[];
-  invitationCount: number;
-}) {
+/**
+ * 招待URL方式への移行（issue #71）に伴い、「招待の確認」への導線は
+ * ここには置かない（届いた招待の一覧という概念自体が無くなったため）。
+ * 新しいグループへの参加はURL経由で直接/groups/join/[code]に着地する。
+ */
+export function GroupSwitcherScreen({ groups }: { groups: Group[] }) {
   return (
     <MobileShell className="pt-[72px]">
       <ScreenHeader
@@ -27,15 +26,6 @@ export function GroupSwitcherScreen({
           <GroupCard key={group.id} group={group} />
         ))}
       </div>
-
-      <NeonLink href="/groups/invitations" size="lg" className="mt-7 w-full">
-        招待の確認
-        {invitationCount > 0 ? (
-          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#ff3b9d] text-xs shadow-[0_0_10px_#ff3b9d]">
-            {invitationCount}
-          </span>
-        ) : null}
-      </NeonLink>
     </MobileShell>
   );
 }

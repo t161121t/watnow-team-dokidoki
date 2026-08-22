@@ -1,28 +1,71 @@
+import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
+
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
-import { BackButton } from "@/components/ui/back-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { StarRating } from "@/components/ui/star-rating";
+import { getCollectionItem } from "@/features/secrets/server/get-collection-item";
+import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { getGroupNavigation } from "@/lib/navigation";
+import { getCurrentUserId } from "@/lib/supabase/server";
 
-export type CollectionSecret = {
+function formatDateLabel(date: Date | null): string | null {
+  if (!date) return null;
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+/**
+ * 秘密ビューワー（⑫、落札後）。読み取り専用データは自分でserver/を直接呼んで
+ * 取得する（docs/アーキテクチャ.md §1.1a: RSCのreadはactions.tsを経由しない。
+ * 2026-08-22レビュー指摘）。groupId/secretIdは秘密リスト/マイページ側がまだ
+ * モックデータのままでUUIDでないIDを渡してくることがあるため、ここで先に
+ * 弾いて404にする。
+ */
+export async function SecretViewerScreen({
+  groupId,
+  secretId,
+  returnTab,
+}: {
   groupId: string;
-  summary: string;
-  body: string;
-  category: string;
-  rarity: number;
-  ownerName: string;
-  finalPrice: number | null;
-  grantedAtLabel: string | null;
-};
+  secretId: string;
+  returnTab: SecretListTab;
+}) {
+  if (!z.string().uuid().safeParse(groupId).success || !z.string().uuid().safeParse(secretId).success) {
+    notFound();
+  }
 
-export function SecretViewerScreen({ secret }: { secret: CollectionSecret }) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    redirect(
+      `/login?redirect_to=${encodeURIComponent(`/groups/${groupId}/collection/${secretId}`)}`,
+    );
+  }
+
+  const item = await getCollectionItem(userId, groupId, secretId);
+  if (!item) {
+    notFound();
+  }
+
+  const secret = {
+    groupId,
+    summary: item.summary,
+    body: item.body,
+    category: item.category,
+    rarity: item.rarity,
+    ownerName: item.seller_nickname ?? "不明",
+    finalPrice: item.final_price,
+    grantedAtLabel: formatDateLabel(item.granted_at),
+  };
+
+  const backHref = `/groups/${groupId}/secrets?tab=${returnTab}`;
+
   return (
     <MobileShell withNavigation>
       <ScreenHeader
         title="秘密ビューワー"
-        backHref={`/groups/${secret.groupId}/secrets`}
+        backHref={backHref}
       />
 
       <h2 className="mb-5 text-center text-xl font-bold [text-shadow:0_0_12px_rgba(208,66,255,0.75)]">
@@ -30,7 +73,7 @@ export function SecretViewerScreen({ secret }: { secret: CollectionSecret }) {
       </h2>
 
       <NeonCard className="overflow-hidden">
-        <div className="border-b border-white/10 bg-[#c038ff]/8 p-5">
+        <div className="border-b border-white/10 p-5">
           <p className="text-[10px] text-white/40">秘密の見出し</p>
           <h3 className="mt-2 text-lg leading-7 font-bold">{secret.summary}</h3>
         </div>
@@ -58,7 +101,7 @@ export function SecretViewerScreen({ secret }: { secret: CollectionSecret }) {
           <p className="mt-1 font-bold">{secret.ownerName}</p>
         </div>
         <div>
-          <p className="text-white/38">登録日</p>
+          <p className="text-white/38">落札日</p>
           <p className="mt-1 font-bold">{secret.grantedAtLabel ?? "-"}</p>
         </div>
         <div>
@@ -69,12 +112,10 @@ export function SecretViewerScreen({ secret }: { secret: CollectionSecret }) {
         </div>
       </NeonCard>
 
-      <BackButton
-        href={`/groups/${secret.groupId}/secrets`}
-        aria-label="秘密リストへ戻る"
-        className="mx-auto mt-6"
+      <BottomNavigation
+        items={getGroupNavigation(groupId)}
+        active={returnTab === "collection" ? "me" : "secrets"}
       />
-      <BottomNavigation items={getGroupNavigation(secret.groupId)} active="secrets" />
     </MobileShell>
   );
 }

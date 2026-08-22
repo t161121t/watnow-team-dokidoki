@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { BottomNavigation } from "@/components/layout/bottom-navigation";
@@ -6,18 +7,19 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { Avatar } from "@/components/ui/avatar";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonLink } from "@/components/ui/neon-button";
+import { avatarToneFromUserId, initialsFromNickname } from "@/lib/avatar";
 import { getGroupNavigation } from "@/lib/navigation";
-import type { Group } from "@/lib/types/group";
 import type { Secret } from "@/lib/types/secret";
-import type { User } from "@/lib/types/user";
 
 export function ProfileScreen({
-  group,
+  groupId,
   user,
+  balanceSection,
   collection,
 }: {
-  group: Group;
-  user: User;
+  groupId: string;
+  user: { id: string; nickname: string; email: string | null };
+  balanceSection: ReactNode;
   collection: Secret[];
 }) {
   return (
@@ -25,7 +27,7 @@ export function ProfileScreen({
       <ScreenHeader
         title="マイページ"
         action={
-          <NeonLink href="/settings" variant="secondary" size="sm">
+          <NeonLink href={`/settings?from=/groups/${groupId}/me`} variant="secondary" size="sm">
             設定
           </NeonLink>
         }
@@ -33,16 +35,16 @@ export function ProfileScreen({
 
       <NeonCard className="p-5 text-center">
         <Avatar
-          initials={user.initials}
-          tone={user.avatarColor}
+          initials={initialsFromNickname(user.nickname)}
+          tone={avatarToneFromUserId(user.id)}
           className="mx-auto size-20 text-xl shadow-xl"
         />
-        <h2 className="mt-3 text-xl font-bold">{user.name}</h2>
-        <p className="mt-1 text-xs text-white/42">{user.email}</p>
+        <h2 className="mt-3 text-xl font-bold">{user.nickname}</h2>
+        {user.email ? <p className="mt-1 text-xs text-white/42">{user.email}</p> : null}
         <div className="mt-5 grid grid-cols-2 divide-x divide-white/10 border-t border-white/10 pt-4">
           <div>
             <p className="text-[10px] text-white/38">ポイント</p>
-            <p className="mt-1 font-black">{group.balance.toLocaleString()}pt</p>
+            {balanceSection}
           </div>
           <div>
             <p className="text-[10px] text-white/38">落札した秘密</p>
@@ -55,7 +57,11 @@ export function ProfileScreen({
         <NeonLink href="/groups" variant="secondary" className="w-full">
           グループ切替
         </NeonLink>
-        <NeonLink href="/settings" variant="secondary" className="w-full">
+        <NeonLink
+          href={`/settings?from=/groups/${groupId}/me`}
+          variant="secondary"
+          className="w-full"
+        >
           アカウント設定
         </NeonLink>
       </div>
@@ -67,7 +73,7 @@ export function ProfileScreen({
         {collection.map((secret) => (
           <Link
             key={secret.id}
-            href={`/groups/${group.id}/collection/${secret.id}`}
+            href={`/groups/${groupId}/collection/${secret.id}`}
             className="block"
           >
             <NeonCard className="p-4">
@@ -76,7 +82,7 @@ export function ProfileScreen({
           </Link>
         ))}
       </section>
-      <BottomNavigation items={getGroupNavigation(group.id)} active="me" />
+      <BottomNavigation items={getGroupNavigation(groupId)} active="me" />
     </MobileShell>
   );
 }

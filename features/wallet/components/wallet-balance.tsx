@@ -7,17 +7,23 @@ import { getWalletBalance } from "@/features/wallet/server/get-balance";
  * docs/アーキテクチャ.md §1.1a参照）。userIdの取得はこのコンポーネント自身の
  * 責務（server/の関数は暗黙の認証を持たず、userIdを明示的な引数で受け取る）。
  */
-export async function WalletBalance({ groupId }: { groupId: string }) {
+export async function WalletBalance({
+  groupId,
+  className,
+}: {
+  groupId: string;
+  className?: string;
+}) {
   const userId = await getCurrentUserId();
   if (!userId) {
-    return <p>ログインが必要です</p>;
+    return <p className={className}>ログインが必要です</p>;
   }
 
   const balance = await getWalletBalance(userId, groupId);
 
   if (balance === null) {
-    return <p>まだ財布がありません</p>;
+    return <p className={className}>まだ財布がありません</p>;
   }
 
-  return <p>{balance} pt</p>;
+  return <p className={className}>{balance.toLocaleString()}pt</p>;
 }

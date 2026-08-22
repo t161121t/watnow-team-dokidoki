@@ -232,6 +232,32 @@ async function main() {
     "my_secret_collection_view: ディーラーは出品者でも落札者でもないので見えない",
   );
 
+  // --- users_select_auction_counterparty（prisma/sql/secrets/005_collection_history_policy.sql） ---
+  // 出品者がグループを脱退した後も、落札者からその出品者のnicknameが引き続き
+  // 取得できることを確認する（2026-08-22レビュー指摘。以前はusers_select_
+  // self_or_group_memberのみで、脱退後は「不明」になっていた）。
+  // 最後のadminは脱退できないため、先にdealerをadmin化してから脱退させる。
+  await withRlsContext(seller, (tx) =>
+    tx.$executeRaw`SELECT update_group_member_role(${groupId}::uuid, ${dealer}::uuid, 'admin'::member_role)`,
+  );
+  await withRlsContext(seller, (tx) => tx.$executeRaw`SELECT leave_group(${groupId}::uuid)`);
+
+  const sellerNicknameAfterLeaving = await withRlsContext(bidder, (tx) =>
+    tx.user.findUnique({ where: { id: seller }, select: { nickname: true } }),
+  );
+  assert(
+    sellerNicknameAfterLeaving?.nickname === "SecretsTest0",
+    "users_select_auction_counterparty: 出品者が脱退後も落札者からnicknameが見える",
+  );
+
+  const sellerNicknameForOutsider = await withRlsContext(outsider, (tx) =>
+    tx.user.findUnique({ where: { id: seller }, select: { nickname: true } }),
+  );
+  assert(
+    sellerNicknameForOutsider === null,
+    "users_select_auction_counterparty: 取引に無関係な第三者には引き続き見えない",
+  );
+
   console.log("\nALL CHECKS PASSED");
 }
 
