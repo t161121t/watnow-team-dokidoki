@@ -25,9 +25,8 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "ドキドキ秘密オークション",
-  description:
-    "仲のいい友達と、チャレンジでポイントを集めて秘密を競り落とすコミュニケーションゲーム。落札した人だけが秘密の本文を読めます。",
+  title: "秘密オークション",
+  description: "友達グループ向けの秘密オークションゲーム",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
