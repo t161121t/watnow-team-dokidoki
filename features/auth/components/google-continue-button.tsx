@@ -29,8 +29,10 @@ const googleMark = (
 );
 
 /**
- * redirectTo: ログイン成功後に戻したいパス（"/"始まり）。省略時は
- * signInWithGoogle側のデフォルト（コールバックが"/"に戻す）。
+ * redirectTo: ログイン成功後に特定のページへ戻したい場合のみ指定する
+ * （"/"始まり）。通常は省略してよい。省略時はapp/auth/callback/route.tsが
+ * 本人の所属groupを見て自動で行き先を決める（所属あり→ホーム、無し→
+ * 参加/作成。2026-08-22、ログイン後にホームへ行かない不具合の修正）。
  * PR #74時点ではモックのrouter.push(href)だったが、実際のGoogle認証
  * （features/auth/actions.tsのsignInWithGoogle）に接続した（issue #72）。
  */
