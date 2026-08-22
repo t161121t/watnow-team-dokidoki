@@ -49,13 +49,24 @@ export function GoogleContinueButton({ redirectTo }: { redirectTo?: string }) {
         onClick={() => {
           setError(null);
           setIsSubmitting(true);
-          // signInWithGoogleは成功時にnext/navigationのredirect()でGoogleの
-          // 認可画面へ遷移させる（ブラウザが離脱するのでこのPromiseは解決しない）。
-          // エラー時のみここに戻ってくる。
-          signInWithGoogle({ redirectTo }).catch(() => {
-            setIsSubmitting(false);
-            setError("Googleログインを開始できませんでした");
-          });
+          // signInWithGoogleはリダイレクトせずGoogle認可画面のURLを返す
+          // （features/auth/actions.tsのコメント参照。Server Action内で
+          // redirect()すると遷移直前にエラーが一瞬表示される不具合があった）。
+          // 成功時はここでwindow.location.hrefにより遷移させる（isSubmittingは
+          // trueのままにして遷移完了までボタンを無効化しておく）。
+          signInWithGoogle({ redirectTo })
+            .then((result) => {
+              if (result.status === "ok") {
+                window.location.href = result.url;
+                return;
+              }
+              setIsSubmitting(false);
+              setError("Googleログインを開始できませんでした");
+            })
+            .catch(() => {
+              setIsSubmitting(false);
+              setError("Googleログインを開始できませんでした");
+            });
         }}
         className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-white text-[15px] font-bold text-[#1f1f1f] shadow-[0_0_18px_rgba(255,255,255,0.12)] transition hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c038ff] focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-45 [font-family:var(--font-noto-sans-jp)]"
       >

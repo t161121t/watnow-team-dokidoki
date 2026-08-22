@@ -37,13 +37,24 @@ const passwordSignUpSchema = passwordSignInSchema.extend({
  * 作成はSupabase Auth側に任せる。public.usersの作成はここでは行わない
  * （オンボーディング完了時のcompleteProfileで行う）。
  *
- * signInWithOAuthはリダイレクト先URLを返すだけで自分ではリダイレクトしない
- * （ブラウザの遷移が必要なため）。Server Action内でnext/navigationのredirect()
- * を呼び、呼び出し元（フォームのaction等）はこの関数を直接呼べば良い。
+ * signInWithOAuthが返すのはGoogleの認可画面（外部オリジン）へのURLのみ。
+ * ここでnext/navigationのredirect()を呼ぶと、フォームaction経由ではなく
+ * onClickから直接呼ばれるこの関数では、ブラウザが実際に遷移する前に
+ * NEXT_REDIRECT信号がクライアント側の.catch()に予期せず捕まり、遷移直前に
+ * 一瞬エラーメッセージが表示されてしまう不具合があった（2026-08-23、
+ * ユーザー報告）。そのためリダイレクトはせず、URLを返してクライアント側で
+ * window.location.hrefにより遷移させる（features/auth/components/
+ * google-continue-button.tsx参照）。
  */
-export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
-  const parsed = redirectToSchema.parse(input);
-  const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
+export type SignInWithGoogleResult = { status: "ok"; url: string } | { status: "failed" };
+
+export async function signInWithGoogle(
+  input: { redirectTo?: string } = {},
+): Promise<SignInWithGoogleResult> {
+  const parsed = redirectToSchema.safeParse(input);
+  if (!parsed.success) return { status: "failed" };
+
+  const callbackUrl = await buildCallbackUrl(parsed.data.redirectTo);
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -52,10 +63,10 @@ export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
   });
 
   if (error || !data.url) {
-    throw new Error("Googleログインの開始に失敗しました");
+    return { status: "failed" };
   }
 
-  redirect(data.url);
+  return { status: "ok", url: data.url };
 }
 
 /**
