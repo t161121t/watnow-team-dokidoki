@@ -123,9 +123,14 @@ export async function declineDealer(input: { auctionId: string }): Promise<Deale
   }
 }
 
+// PostgreSQL int4の上限（features/auctions/server/place-bid.tsがamountを
+// int4にキャストするため。手打ち入力だとここを超える値を入力しやすい。
+// 2026-08-23レビュー指摘）。
+const INT4_MAX = 2147483647;
+
 const placeBidSchema = z.object({
   auctionId: z.string().uuid(),
-  amount: z.number().int().positive(),
+  amount: z.number().int().positive().max(INT4_MAX),
 });
 
 /**
