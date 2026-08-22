@@ -11,9 +11,11 @@ export function isSafeRedirectPath(path: string): boolean {
 
 /**
  * ログイン済みユーザーのデフォルト遷移先（docs/画面.md §2）。
- * 所属ありならホーム⑥、未所属なら参加/作成。複数所属時は作成が古い順の先頭
- * （getMyGroupsのorderByと同じ。最後に開いたグループの記憶は未実装）。
+ * 所属ありならホーム⑥、未所属ならグループ一覧（`/groups`）の空状態へ。
+ * 複数所属時は作成が古い順の先頭（getMyGroupsのorderByと同じ。最後に開いた
+ * グループの記憶は未実装）。旧参加/作成ハブ`/groups/join`は`/groups`へ統合済み
+ * （chore(groups): /groups/joinハブ画面を廃止し/groupsの空状態に統合）。
  */
 export function postAuthDestination(groups: { id: string }[]): string {
-  return groups.length > 0 ? `/groups/${groups[0].id}` : "/groups/join";
+  return groups.length > 0 ? `/groups/${groups[0].id}` : "/groups";
 }
