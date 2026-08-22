@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
-import { BackButton } from "@/components/ui/back-button";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonTextarea } from "@/components/ui/neon-field";
@@ -168,14 +167,10 @@ export function CreateSecretScreen({ groupId }: { groupId: string }) {
               </div>
             </div>
           </NeonCard>
-          <div className="grid grid-cols-[0.7fr_1.3fr] gap-3">
-            <BackButton
-              onClick={() => setStep(1)}
-              aria-label="入力内容を修正する"
-              className="justify-self-center"
-            />
+          <div>
             <NeonButton
               size="lg"
+              className="w-full"
               onClick={() => router.push(`/groups/${groupId}/secrets`)}
             >
               登録する
