@@ -33,16 +33,26 @@ export async function AuctionListScreen({ groupId }: { groupId: string }) {
   ]);
   const winningSet = new Set(winningAuctionIds);
 
-  const auctions: Auction[] = rows.map((row) => toAuction(row, winningSet.has(row.auction_id)));
+  // getAuctionListはgroup内の全auction（承認待ち・完了済み・キャンセル済み
+  // 含む）を返す。一覧は入札会場の入口のため、まだ入札できないもの
+  // （承認待ち等）は出さない（features/auctions/components/
+  // home-auction-section.tsxと同じ理由。2026-08-23レビュー指摘）。
+  const auctions: Auction[] = rows
+    .filter((row) => row.status === "open")
+    .map((row) => toAuction(row, winningSet.has(row.auction_id)));
 
   return (
     <MobileShell withNavigation>
       <ScreenHeader title="オークション" />
-      <div className="space-y-4">
-        {auctions.map((auction) => (
-          <AuctionCard key={auction.id} auction={auction} />
-        ))}
-      </div>
+      {auctions.length > 0 ? (
+        <div className="space-y-4">
+          {auctions.map((auction) => (
+            <AuctionCard key={auction.id} auction={auction} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-white/45">開催中のオークションはありません</p>
+      )}
       <BottomNavigation items={getGroupNavigation(groupId)} active="auctions" />
     </MobileShell>
   );
