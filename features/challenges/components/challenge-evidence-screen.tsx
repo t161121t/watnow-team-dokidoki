@@ -10,7 +10,18 @@ import { ScreenHeader } from "@/components/layout/screen-header";
 import { NeonButton } from "@/components/ui/neon-button";
 import { NeonCard } from "@/components/ui/neon-card";
 import { createChallengeEvidenceUploadUrl, submitChallenge } from "@/features/challenges/actions";
+import type { SubmitChallengeErrorStatus } from "@/features/challenges/actions";
 import { getGroupNavigation } from "@/lib/navigation";
+
+const SUBMIT_CHALLENGE_ERROR_MESSAGES: Record<SubmitChallengeErrorStatus, string> = {
+  not_a_member: "このグループのメンバーではありません",
+  challenge_not_available: "このチャレンジは現在利用できません",
+  evidence_required: "証拠写真を撮影するか、アルバムから選んでください",
+  invalid_evidence_path: "写真のアップロードに問題がありました。もう一度お試しください",
+  in_cooldown: "クールダウン中はまだ挑戦できません",
+  pending_attempt_exists: "既に承認待ちの提出があります",
+  unknown_error: "提出に失敗しました",
+};
 
 function extensionOf(file: File): string | null {
   const match = /\.([a-zA-Z0-9]+)$/.exec(file.name);
@@ -71,26 +82,40 @@ export function ChallengeEvidenceScreen({
     }
 
     setIsSubmitting(true);
-    try {
-      let evidencePath: string | null = null;
 
-      if (file) {
-        const extension = extensionOf(file);
-        if (!extension) {
-          throw new Error("対応していない画像形式です");
-        }
+    let evidencePath: string | null = null;
+    if (file) {
+      const extension = extensionOf(file);
+      if (!extension) {
+        setMessage("対応していない画像形式です");
+        setIsSubmitting(false);
+        return;
+      }
+      // アップロードURL発行・PUTはこのコンポーネント内で完結する処理
+      // （signedUrlへの直接PUTはブラウザ→Storageの通信でServer Actionの
+      // RPC境界を越えない）ため、ここはthrow/catchのままでよい。
+      try {
         const { path, signedUrl } = await createChallengeEvidenceUploadUrl({ extension });
         const putResponse = await fetch(signedUrl, { method: "PUT", body: file });
         if (!putResponse.ok) {
           throw new Error("アップロードに失敗しました");
         }
         evidencePath = path;
+      } catch {
+        setMessage("アップロードに失敗しました");
+        setIsSubmitting(false);
+        return;
       }
+    }
 
-      await submitChallenge({ groupId, challengeId, evidencePath });
+    // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+    // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+    // 2026-08-23、features/auctions/actions.tsの同種の修正と同じ理由）。
+    const result = await submitChallenge({ groupId, challengeId, evidencePath });
+    if (result.status === "ok") {
       router.push(listHref);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "提出に失敗しました");
+    } else {
+      setMessage(SUBMIT_CHALLENGE_ERROR_MESSAGES[result.status]);
       setIsSubmitting(false);
     }
   };

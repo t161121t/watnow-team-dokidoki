@@ -13,6 +13,7 @@ import { GoogleContinueButton } from "@/features/auth/components/google-continue
 import { signUpWithPassword } from "@/features/auth/actions";
 import type { SignupInput } from "@/features/auth/validation";
 import { signupSchema } from "@/features/auth/validation";
+import { PASSWORD_AUTH_ERROR_MESSAGES } from "@/features/auth/password-auth-error-messages";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -43,24 +44,22 @@ export function SignupScreen() {
     setIsSubmitting(true);
     // メール確認不要な場合はsignUpWithPassword内でredirect()する
     // （このPromiseは解決せずブラウザが遷移する）。確認が必要な場合のみ
-    // confirmationRequiredがtrueで返り、ここで完了メッセージに切り替える。
-    try {
-      const result = await signUpWithPassword({
-        email: values.email,
-        password: values.password,
-        nickname: values.nickname,
-        redirectTo: "/groups",
-      });
-      if (result.confirmationRequired) {
-        setConfirmationSent(true);
-      }
-    } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "登録に失敗しました",
-      );
-    } finally {
-      setIsSubmitting(false);
+    // status:"confirmation_required"が返り、ここで完了メッセージに切り替える。
+    // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+    // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+    // 2026-08-23、features/auctions/actions.tsの同種の修正と同じ理由）。
+    const result = await signUpWithPassword({
+      email: values.email,
+      password: values.password,
+      nickname: values.nickname,
+      redirectTo: "/groups",
+    });
+    setIsSubmitting(false);
+    if (result.status === "confirmation_required") {
+      setConfirmationSent(true);
+      return;
     }
+    setSubmitError(PASSWORD_AUTH_ERROR_MESSAGES[result.status]);
   };
 
   return (

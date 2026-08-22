@@ -59,15 +59,50 @@ export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
 }
 
 /**
+ * Supabaseのエラーメッセージ（英語）を画面表示用の分類コードに丸める。
+ * どのメールアドレスが未登録/未確認かを漏らさないよう、ログイン失敗は
+ * 「メールアドレスまたはパスワードが正しくありません」に丸める。
+ *
+ * throwではなく戻り値のstatusで表現する（features/groups/actions.tsの
+ * joinGroupViaInviteLinkと同じパターン）。throw/error.messageの文字列比較には
+ * 依存しない設計にしたのは、本番ビルドではServer Actionのエラーメッセージが
+ * サニタイズされ、ここで組み立てた日本語メッセージ自体がクライアントに
+ * 届かなくなるため（2026-08-23、ユーザー報告を受けたfeatures/auctions/actions.ts
+ * の同種の修正と同じ理由）。日本語文言はクライアント側の呼び出し元
+ * コンポーネントで持つ。
+ */
+export type PasswordAuthErrorStatus =
+  | "email_not_confirmed"
+  | "already_registered"
+  | "invalid_credentials"
+  | "rate_limited"
+  | "invalid_password_format"
+  | "unknown_error";
+
+function mapPasswordAuthErrorStatus(message: string): PasswordAuthErrorStatus {
+  const lower = message.toLowerCase();
+  if (lower.includes("email not confirmed")) return "email_not_confirmed";
+  if (lower.includes("already registered") || lower.includes("already exists")) {
+    return "already_registered";
+  }
+  if (lower.includes("invalid login credentials")) return "invalid_credentials";
+  if (lower.includes("rate limit")) return "rate_limited";
+  if (lower.includes("password")) return "invalid_password_format";
+  return "unknown_error";
+}
+
+export type SignInResult = { status: PasswordAuthErrorStatus };
+
+/**
  * メールアドレス・パスワードでのログイン（issue #76）。Googleと違い
  * リダイレクトを挟まずこのServer Action内でセッションが確立するため、
- * 成功時はそのままredirect()する。
+ * 成功時はそのままredirect()する（呼び出し元に戻ってくるのは失敗時のみ）。
  */
 export async function signInWithPassword(input: {
   email: string;
   password: string;
   redirectTo?: string;
-}) {
+}): Promise<SignInResult> {
   const parsed = passwordSignInSchema.parse(input);
   const supabase = await createSupabaseServerClient();
 
@@ -77,11 +112,13 @@ export async function signInWithPassword(input: {
   });
 
   if (error) {
-    throw new Error(mapPasswordAuthError(error.message));
+    return { status: mapPasswordAuthErrorStatus(error.message) };
   }
 
   redirect(parsed.redirectTo ?? "/groups");
 }
+
+export type SignUpResult = { status: "confirmation_required" } | { status: PasswordAuthErrorStatus };
 
 /**
  * メールアドレス・パスワードでの新規登録（issue #76）。ニックネームはサインアップ
@@ -100,7 +137,7 @@ export async function signUpWithPassword(input: {
   password: string;
   nickname: string;
   redirectTo?: string;
-}): Promise<{ confirmationRequired: boolean }> {
+}): Promise<SignUpResult> {
   const parsed = passwordSignUpSchema.parse(input);
   const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
   const supabase = await createSupabaseServerClient();
@@ -115,40 +152,15 @@ export async function signUpWithPassword(input: {
   });
 
   if (error) {
-    throw new Error(mapPasswordAuthError(error.message));
+    return { status: mapPasswordAuthErrorStatus(error.message) };
   }
 
   if (!data.user || !data.session) {
-    return { confirmationRequired: true };
+    return { status: "confirmation_required" };
   }
 
   await createProfile(data.user.id, parsed.nickname, null);
   redirect(parsed.redirectTo ?? "/groups");
-}
-
-/**
- * Supabaseのエラーメッセージ（英語）を画面表示用の日本語メッセージに変換する。
- * どのメールアドレスが未登録/未確認かを漏らさないよう、ログイン失敗は
- * 「メールアドレスまたはパスワードが正しくありません」に丸める。
- */
-function mapPasswordAuthError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("email not confirmed")) {
-    return "メールアドレスの確認が完了していません。届いた確認メールのリンクを開いてください";
-  }
-  if (lower.includes("already registered") || lower.includes("already exists")) {
-    return "このメールアドレスは既に登録されています";
-  }
-  if (lower.includes("invalid login credentials")) {
-    return "メールアドレスまたはパスワードが正しくありません";
-  }
-  if (lower.includes("rate limit")) {
-    return "リクエストが多すぎます。しばらく時間をおいて再度お試しください";
-  }
-  if (lower.includes("password")) {
-    return "パスワードの形式が正しくありません（8文字以上で入力してください）";
-  }
-  return "認証に失敗しました。時間をおいて再度お試しください";
 }
 
 /** アカウント設定（⑮）でのログアウト。成功したらログイン画面へ戻す。 */

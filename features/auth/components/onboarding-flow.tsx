@@ -12,6 +12,7 @@ import { GoogleContinueButton } from "@/features/auth/components/google-continue
 import { signInWithPassword } from "@/features/auth/actions";
 import type { LoginInput } from "@/features/auth/validation";
 import { loginSchema } from "@/features/auth/validation";
+import { PASSWORD_AUTH_ERROR_MESSAGES } from "@/features/auth/password-auth-error-messages";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -40,19 +41,17 @@ export function LoginScreen({ redirectTo = "/groups" }: { redirectTo?: string } 
     setSubmitError(null);
     setIsSubmitting(true);
     // 成功時はsignInWithPassword内でredirect()するため、このPromiseは解決しない
-    // （ブラウザが遷移する）。エラー時のみここに戻ってくる。
-    try {
-      await signInWithPassword({
-        email: values.email,
-        password: values.password,
-        redirectTo,
-      });
-    } catch (error) {
-      setIsSubmitting(false);
-      setSubmitError(
-        error instanceof Error ? error.message : "ログインに失敗しました",
-      );
-    }
+    // （ブラウザが遷移する）。エラー時のみここに戻ってくる。throw/error.message
+    // の文字列比較には依存しない（本番ビルドではServer Actionのエラー
+    // メッセージがサニタイズされ判定できなくなるため。2026-08-23、
+    // features/auctions/actions.tsの同種の修正と同じ理由）。
+    const result = await signInWithPassword({
+      email: values.email,
+      password: values.password,
+      redirectTo,
+    });
+    setIsSubmitting(false);
+    setSubmitError(PASSWORD_AUTH_ERROR_MESSAGES[result.status]);
   };
 
   return (

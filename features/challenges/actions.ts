@@ -50,6 +50,39 @@ export async function getChallengeEvidenceSignedUrl(input: { path: string }) {
   return createChallengeEvidenceSignedReadUrl(parsed.path);
 }
 
+/**
+ * PostgreSQL FunctionのRAISE EXCEPTIONはPrismaの生SQLエラーとして技術的な
+ * メッセージ（P0001等）で返ってくるため、UI表示用の分類コードに丸める。
+ * 元のRAISE EXCEPTIONメッセージ一覧はprisma/sql/challenges/002_submit_and_review.sql
+ * 参照。throwではなく戻り値のstatusで表現する（features/auctions/actions.ts
+ * のplaceBid等と同じパターン。本番ビルドではServer Actionのエラーメッセージが
+ * サニタイズされ、throwした日本語メッセージ自体がクライアントに届かなくなる
+ * ため。2026-08-23、ユーザー報告を受けて発覚）。日本語文言はクライアント側の
+ * 呼び出し元コンポーネントで持つ。
+ */
+export type SubmitChallengeErrorStatus =
+  | "not_a_member"
+  | "challenge_not_available"
+  | "evidence_required"
+  | "invalid_evidence_path"
+  | "in_cooldown"
+  | "pending_attempt_exists"
+  | "unknown_error";
+
+function mapSubmitChallengeErrorStatus(message: string): SubmitChallengeErrorStatus {
+  if (message.includes("not a member")) return "not_a_member";
+  if (message.includes("challenge not found or not available")) return "challenge_not_available";
+  if (message.includes("evidence photo is required")) return "evidence_required";
+  if (message.includes("evidence_path must belong") || message.includes("evidence_path does not exist")) {
+    return "invalid_evidence_path";
+  }
+  if (message.includes("still in cooldown")) return "in_cooldown";
+  if (message.includes("pending attempt already exists")) return "pending_attempt_exists";
+  return "unknown_error";
+}
+
+export type SubmitChallengeResult = { status: "ok" } | { status: SubmitChallengeErrorStatus };
+
 const submitChallengeSchema = z.object({
   groupId: z.string().uuid(),
   challengeId: z.string().uuid(),
@@ -61,13 +94,33 @@ export async function submitChallenge(input: {
   groupId: string;
   challengeId: string;
   evidencePath?: string | null;
-}) {
+}): Promise<SubmitChallengeResult> {
   const userId = await getCurrentUserId();
   requireUserId(userId);
 
   const parsed = submitChallengeSchema.parse(input);
-  return submitChallengeInDb(userId, parsed.groupId, parsed.challengeId, parsed.evidencePath);
+  try {
+    await submitChallengeInDb(userId, parsed.groupId, parsed.challengeId, parsed.evidencePath);
+    return { status: "ok" };
+  } catch (error) {
+    return { status: mapSubmitChallengeErrorStatus(error instanceof Error ? error.message : "") };
+  }
 }
+
+export type ApproveChallengeErrorStatus =
+  | "attempt_not_found"
+  | "not_authorized"
+  | "cannot_review_own"
+  | "unknown_error";
+
+function mapApproveChallengeErrorStatus(message: string): ApproveChallengeErrorStatus {
+  if (message.includes("attempt not found or already reviewed")) return "attempt_not_found";
+  if (message.includes("not authorized")) return "not_authorized";
+  if (message.includes("cannot review your own attempt")) return "cannot_review_own";
+  return "unknown_error";
+}
+
+export type ApproveChallengeResult = { status: "ok" } | { status: ApproveChallengeErrorStatus };
 
 const approveChallengeSchema = z.object({
   attemptId: z.string().uuid(),
@@ -78,12 +131,17 @@ const approveChallengeSchema = z.object({
 export async function approveChallenge(input: {
   attemptId: string;
   decision: "approved" | "rejected";
-}) {
+}): Promise<ApproveChallengeResult> {
   const userId = await getCurrentUserId();
   requireUserId(userId);
 
   const parsed = approveChallengeSchema.parse(input);
-  return approveChallengeInDb(userId, parsed.attemptId, parsed.decision);
+  try {
+    await approveChallengeInDb(userId, parsed.attemptId, parsed.decision);
+    return { status: "ok" };
+  } catch (error) {
+    return { status: mapApproveChallengeErrorStatus(error instanceof Error ? error.message : "") };
+  }
 }
 
 const createGroupChallengeSchema = z.object({
