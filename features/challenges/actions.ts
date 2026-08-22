@@ -157,16 +157,40 @@ export async function approveChallenge(input: {
   }
 }
 
+// PostgreSQL int4の上限（reward_points/cooldown_secondsがint4カラムのため。
+// features/auctions/actions.tsのINT4_MAXと同じ理由）。
+const INT4_MAX = 2147483647;
+
+export type CreateGroupChallengeErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
+  | "not_authorized"
+  | "unknown_error";
+
+function mapCreateGroupChallengeErrorStatus(message: string): CreateGroupChallengeErrorStatus {
+  if (message.includes("not authorized")) return "not_authorized";
+  return "unknown_error";
+}
+
+export type CreateGroupChallengeResult =
+  | { status: "ok"; challengeId: string }
+  | { status: CreateGroupChallengeErrorStatus };
+
 const createGroupChallengeSchema = z.object({
   groupId: z.string().uuid(),
-  title: z.string().trim().min(1),
-  description: z.string().trim().min(1).nullable().default(null),
-  rewardPoints: z.number().int().min(0),
+  title: z.string().trim().min(1).max(100),
+  description: z.string().trim().min(1).max(500).nullable().default(null),
+  rewardPoints: z.number().int().min(0).max(INT4_MAX),
   requiresEvidencePhoto: z.boolean().default(false),
-  cooldownSeconds: z.number().int().positive().nullable().default(null),
+  cooldownSeconds: z.number().int().positive().max(INT4_MAX).nullable().default(null),
 });
 
-/** グループ独自チャレンジの作成（幹事）。create_group_challenge RPC経由。 */
+/**
+ * グループ独自チャレンジの作成（幹事）。create_group_challenge RPC経由。
+ * throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+ * Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+ * submitChallenge等と同じ理由）。
+ */
 export async function createGroupChallenge(input: {
   groupId: string;
   title: string;
@@ -174,18 +198,25 @@ export async function createGroupChallenge(input: {
   rewardPoints: number;
   requiresEvidencePhoto?: boolean;
   cooldownSeconds?: number | null;
-}) {
+}): Promise<CreateGroupChallengeResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = createGroupChallengeSchema.parse(input);
-  return createGroupChallengeInDb(
-    userId,
-    parsed.groupId,
-    parsed.title,
-    parsed.description,
-    parsed.rewardPoints,
-    parsed.requiresEvidencePhoto,
-    parsed.cooldownSeconds,
-  );
+  const parsed = createGroupChallengeSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
+  try {
+    const challenge = await createGroupChallengeInDb(
+      userId,
+      parsed.data.groupId,
+      parsed.data.title,
+      parsed.data.description,
+      parsed.data.rewardPoints,
+      parsed.data.requiresEvidencePhoto,
+      parsed.data.cooldownSeconds,
+    );
+    return { status: "ok", challengeId: challenge.id };
+  } catch (error) {
+    return { status: mapCreateGroupChallengeErrorStatus(error instanceof Error ? error.message : "") };
+  }
 }

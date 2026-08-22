@@ -32,9 +32,11 @@ const HISTORY_STATUS_LABELS: Record<string, string> = {
 export async function ChallengeScreen({
   groupId,
   balanceSection,
+  isAdmin,
 }: {
   groupId: string;
   balanceSection: ReactNode;
+  isAdmin: boolean;
 }) {
   if (!z.string().uuid().safeParse(groupId).success) {
     notFound();
@@ -88,9 +90,16 @@ export async function ChallengeScreen({
       <ScreenHeader
         title="チャレンジ"
         action={
-          <NeonLink href={`/groups/${groupId}/challenges/review`} variant="secondary" size="sm">
-            承認待ち
-          </NeonLink>
+          <div className="flex shrink-0 gap-2">
+            {isAdmin ? (
+              <NeonLink href={`/groups/${groupId}/challenges/new`} variant="secondary" size="sm">
+                作成
+              </NeonLink>
+            ) : null}
+            <NeonLink href={`/groups/${groupId}/challenges/review`} variant="secondary" size="sm">
+              承認待ち
+            </NeonLink>
+          </div>
         }
       />
       <NeonCard className="mb-7 p-5">
