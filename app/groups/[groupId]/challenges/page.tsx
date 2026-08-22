@@ -1,11 +1,13 @@
+import { parseChallengeListTab } from "@/features/challenges/challenge-list-tab";
 import { ChallengeScreen } from "@/features/challenges/components/challenge-screen";
 import { getMyGroupSummary } from "@/features/groups/actions";
 import { WalletBalance } from "@/features/wallet/components/wallet-balance";
 
 export default async function ChallengesPage({
   params,
+  searchParams,
 }: PageProps<"/groups/[groupId]/challenges">) {
-  const { groupId } = await params;
+  const [{ groupId }, { tab }] = await Promise.all([params, searchParams]);
 
   // 「作成」ボタンをadminにだけ出す判定（groupsドメイン、cross-domain）。
   // ここでnull（未ログイン/非メンバー）でも、ChallengeScreen自身が
@@ -17,6 +19,7 @@ export default async function ChallengesPage({
     <ChallengeScreen
       groupId={groupId}
       isAdmin={group?.role === "admin"}
+      tab={parseChallengeListTab(tab)}
       balanceSection={
         <WalletBalance
           groupId={groupId}
