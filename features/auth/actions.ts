@@ -20,6 +20,15 @@ const magicLinkSchema = redirectToSchema.extend({
   email: z.string().email(),
 });
 
+const passwordSignInSchema = redirectToSchema.extend({
+  email: z.string().trim().email(),
+  password: z.string().min(8),
+});
+
+const passwordSignUpSchema = passwordSignInSchema.extend({
+  nickname: z.string().trim().min(1).max(50),
+});
+
 /**
  * Magic Linkでのサインイン/サインアップ。新規メールアドレスなら
  * Supabase Auth側が自動でauth.usersを作成する（新規/既存の分岐はSupabase任せ）。
@@ -68,6 +77,99 @@ export async function signInWithGoogle(input: { redirectTo?: string } = {}) {
   }
 
   redirect(data.url);
+}
+
+/**
+ * メールアドレス・パスワードでのログイン（issue #76）。Magic Link/Googleと違い
+ * リダイレクトを挟まずこのServer Action内でセッションが確立するため、
+ * 成功時はそのままredirect()する。
+ */
+export async function signInWithPassword(input: {
+  email: string;
+  password: string;
+  redirectTo?: string;
+}) {
+  const parsed = passwordSignInSchema.parse(input);
+  const supabase = await createSupabaseServerClient();
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: parsed.email,
+    password: parsed.password,
+  });
+
+  if (error) {
+    throw new Error(mapPasswordAuthError(error.message));
+  }
+
+  redirect(parsed.redirectTo ?? "/groups");
+}
+
+/**
+ * メールアドレス・パスワードでの新規登録（issue #76）。ニックネームはサインアップ
+ * 画面で既に入力させているため、Magic Link/Googleと違いオンボーディングでの
+ * 追加入力を待たず、ここで直接public.usersを作成する。
+ *
+ * Supabase側の「メール確認」設定が有効な場合、`signUp`は成功してもセッションを
+ * 返さない（`data.session === null`）。この場合はまだプロフィールを作成できない
+ * （auth.uidが取れない）ため、確認メール送信のみで終える。確認リンクを踏むと
+ * `emailRedirectTo`経由で`app/auth/callback/route.ts`に来て、`exchangeCodeForSession`
+ * が`user_metadata.nickname`（ここで`options.data`に積んでいる）を使って
+ * プロフィールを作成する。
+ */
+export async function signUpWithPassword(input: {
+  email: string;
+  password: string;
+  nickname: string;
+  redirectTo?: string;
+}): Promise<{ confirmationRequired: boolean }> {
+  const parsed = passwordSignUpSchema.parse(input);
+  const callbackUrl = await buildCallbackUrl(parsed.redirectTo);
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.email,
+    password: parsed.password,
+    options: {
+      data: { nickname: parsed.nickname },
+      emailRedirectTo: callbackUrl,
+    },
+  });
+
+  if (error) {
+    throw new Error(mapPasswordAuthError(error.message));
+  }
+
+  if (!data.user || !data.session) {
+    return { confirmationRequired: true };
+  }
+
+  await createProfile(data.user.id, parsed.nickname, null);
+  redirect(parsed.redirectTo ?? "/groups");
+}
+
+/**
+ * Supabaseのエラーメッセージ（英語）を画面表示用の日本語メッセージに変換する。
+ * どのメールアドレスが未登録/未確認かを漏らさないよう、ログイン失敗は
+ * 「メールアドレスまたはパスワードが正しくありません」に丸める。
+ */
+function mapPasswordAuthError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("email not confirmed")) {
+    return "メールアドレスの確認が完了していません。届いた確認メールのリンクを開いてください";
+  }
+  if (lower.includes("already registered") || lower.includes("already exists")) {
+    return "このメールアドレスは既に登録されています";
+  }
+  if (lower.includes("invalid login credentials")) {
+    return "メールアドレスまたはパスワードが正しくありません";
+  }
+  if (lower.includes("rate limit")) {
+    return "リクエストが多すぎます。しばらく時間をおいて再度お試しください";
+  }
+  if (lower.includes("password")) {
+    return "パスワードの形式が正しくありません（8文字以上で入力してください）";
+  }
+  return "認証に失敗しました。時間をおいて再度お試しください";
 }
 
 export async function signOut() {
@@ -132,6 +234,12 @@ export async function completeProfile(input: {
  * 呼び、最低限アプリが動く状態にする。Magic Link（メールのみでニックネーム
  * 情報が無い）の場合はfallbackとしてメールのローカル部を使う。
  * ニックネームは後からアカウント設定（⑮）で変更できる想定。
+ *
+ * 2026-08-22（issue #76、メールアドレス・パスワード認証の確認メールリンク経由）:
+ * メール確認が必要な設定の場合、signUpWithPasswordはセッションを持たないまま
+ * 返り確認メールを送るだけで終わる。確認リンクを踏むとここに来るため、
+ * signUpWithPasswordが`options.data`に積んだ`user_metadata.nickname`
+ * （サインアップ画面で入力させた本来のニックネーム）を最優先で使う。
  */
 export async function exchangeCodeForSession(code: string): Promise<boolean> {
   const supabase = await createSupabaseServerClient();
@@ -144,6 +252,7 @@ export async function exchangeCodeForSession(code: string): Promise<boolean> {
   if (!existingProfile) {
     const metadata = data.user.user_metadata as Record<string, unknown>;
     const fallbackNickname =
+      (typeof metadata.nickname === "string" && metadata.nickname) ||
       (typeof metadata.full_name === "string" && metadata.full_name) ||
       (typeof metadata.name === "string" && metadata.name) ||
       data.user.email?.split("@")[0] ||
