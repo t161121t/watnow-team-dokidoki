@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -11,6 +10,7 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonInput } from "@/components/ui/neon-field";
 import { Label } from "@/components/ui/label";
 import { GoogleContinueButton } from "@/features/auth/components/google-continue-button";
+import { signUpWithPassword } from "@/features/auth/actions";
 import type { SignupInput } from "@/features/auth/validation";
 import { signupSchema } from "@/features/auth/validation";
 
@@ -29,17 +29,38 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 }
 
 export function SignupScreen() {
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const form = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
     defaultValues: { email: "", password: "", nickname: "" },
     mode: "onTouched",
   });
 
-  const submitSignup = () => {
+  const submitSignup = async (values: SignupInput) => {
+    setSubmitError(null);
     setIsSubmitting(true);
-    window.setTimeout(() => router.push("/groups/join"), 450);
+    // メール確認不要な場合はsignUpWithPassword内でredirect()する
+    // （このPromiseは解決せずブラウザが遷移する）。確認が必要な場合のみ
+    // confirmationRequiredがtrueで返り、ここで完了メッセージに切り替える。
+    try {
+      const result = await signUpWithPassword({
+        email: values.email,
+        password: values.password,
+        nickname: values.nickname,
+        redirectTo: "/groups",
+      });
+      if (result.confirmationRequired) {
+        setConfirmationSent(true);
+      }
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "登録に失敗しました",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -64,6 +85,14 @@ export function SignupScreen() {
           新規登録
         </h1>
 
+        {confirmationSent ? (
+          <div
+            role="status"
+            className="absolute top-[188px] left-[30px] w-[calc(100%-60px)] max-w-[342px] rounded-2xl border-[1.5px] border-[#c038ff] bg-black/60 p-6 text-[14px] leading-relaxed font-medium text-white shadow-[0_0_16px_0_#d042ff] [font-family:var(--font-noto-sans-jp)]"
+          >
+            確認メールを送信しました。メール内のリンクを開いて登録を完了してください。
+          </div>
+        ) : (
         <form
           className="absolute top-[188px] left-[30px] w-[calc(100%-60px)] max-w-[342px]"
           onSubmit={form.handleSubmit(submitSignup)}
@@ -140,6 +169,8 @@ export function SignupScreen() {
             />
           </div>
 
+          <FieldError id="signup-error" message={submitError ?? undefined} />
+
           <NeonButton
             type="submit"
             disabled={isSubmitting}
@@ -168,6 +199,7 @@ export function SignupScreen() {
             </Link>
           </p>
         </form>
+        )}
       </section>
     </main>
   );

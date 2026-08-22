@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -10,9 +9,9 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonInput } from "@/components/ui/neon-field";
 import { Label } from "@/components/ui/label";
 import { GoogleContinueButton } from "@/features/auth/components/google-continue-button";
+import { signInWithPassword } from "@/features/auth/actions";
 import type { LoginInput } from "@/features/auth/validation";
 import { loginSchema } from "@/features/auth/validation";
-import { mockCurrentGroupId } from "@/lib/mocks/groups";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -29,17 +28,31 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 }
 
 export function LoginScreen() {
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
     mode: "onTouched",
   });
 
-  const submitLogin = () => {
+  const submitLogin = async (values: LoginInput) => {
+    setSubmitError(null);
     setIsSubmitting(true);
-    window.setTimeout(() => router.push(`/groups/${mockCurrentGroupId}`), 450);
+    // 成功時はsignInWithPassword内でredirect()するため、このPromiseは解決しない
+    // （ブラウザが遷移する）。エラー時のみここに戻ってくる。
+    try {
+      await signInWithPassword({
+        email: values.email,
+        password: values.password,
+        redirectTo: "/groups",
+      });
+    } catch (error) {
+      setIsSubmitting(false);
+      setSubmitError(
+        error instanceof Error ? error.message : "ログインに失敗しました",
+      );
+    }
   };
 
   return (
@@ -119,6 +132,8 @@ export function LoginScreen() {
           >
             パスワードを忘れた方はこちら
           </button>
+
+          <FieldError id="login-error" message={submitError ?? undefined} />
 
           <NeonButton
             type="submit"
