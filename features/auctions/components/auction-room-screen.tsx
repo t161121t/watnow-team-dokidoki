@@ -18,6 +18,8 @@ import type { AuctionStatus } from "@/features/auctions/types";
 import { getGroupNavigation } from "@/lib/navigation";
 
 const PLACE_BID_ERROR_MESSAGES: Record<PlaceBidErrorStatus, string> = {
+  not_authenticated: "ログインが必要です",
+  invalid_input: "入力内容が正しくありません",
   insufficient_balance: "残高が不足しています",
   seller_cannot_bid: "自分の出品には入札できません",
   dealer_cannot_bid: "担当ディーラーは入札できません",
@@ -131,18 +133,24 @@ export function AuctionRoomScreen({
   const submitBid = async () => {
     setMessage("");
     setIsSubmitting(true);
-    // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
-    // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
-    // 2026-08-23、ユーザー報告で発覚）。placeBidは例外を投げず、戻り値の
-    // statusで成功/失敗理由を表現する。
-    const result = await placeBid({ auctionId: auction.id, amount });
-    if (result.status === "ok") {
-      setMessage(`${amount.toLocaleString()}ptで入札しました`);
-      router.refresh();
-    } else {
-      setMessage(PLACE_BID_ERROR_MESSAGES[result.status]);
+    try {
+      // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+      // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+      // 2026-08-23、ユーザー報告で発覚）。placeBidは例外を投げず、戻り値の
+      // statusで成功/失敗理由を表現する（セッション切れ・入力不正も含む）。
+      const result = await placeBid({ auctionId: auction.id, amount });
+      if (result.status === "ok") {
+        setMessage(`${amount.toLocaleString()}ptで入札しました`);
+        router.refresh();
+      } else {
+        setMessage(PLACE_BID_ERROR_MESSAGES[result.status]);
+      }
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setMessage("通信エラーが発生しました。もう一度お試しください");
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (

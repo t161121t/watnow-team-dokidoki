@@ -16,7 +16,10 @@ import type { SecretListTab } from "@/features/secrets/secret-list-tab";
 import { getGroupNavigation } from "@/lib/navigation";
 
 const DEALER_ACTION_ERROR_MESSAGES: Record<DealerActionErrorStatus, string> = {
+  not_authenticated: "ログインが必要です",
+  invalid_input: "入力内容が正しくありません",
   not_authorized: "この操作を行う権限がありません",
+  not_active_member: "このグループのメンバーではありません",
   no_other_eligible_dealer: "他に割り当て可能なディーラーがいません",
   already_processed: "この案件は既に処理済みです",
   unknown_error: "操作に失敗しました",
@@ -64,15 +67,22 @@ export function SecretDetailScreen({
   const handleApprove = async () => {
     if (!secret.auctionId) return;
     setIsSubmitting(true);
-    // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
-    // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
-    // 2026-08-23、ユーザー報告で発覚）。approveDealerAssignmentは例外を
-    // 投げず、戻り値のstatusで成功/失敗理由を表現する。
-    const result = await approveDealerAssignment({ auctionId: secret.auctionId });
-    if (result.status === "ok") {
-      router.refresh();
-    } else {
-      setMessage(DEALER_ACTION_ERROR_MESSAGES[result.status]);
+    try {
+      // throw/error.messageの文字列比較には依存しない（本番ビルドではServer
+      // Actionのエラーメッセージがサニタイズされ判定できなくなるため。
+      // 2026-08-23、ユーザー報告で発覚）。approveDealerAssignmentは例外を
+      // 投げず、戻り値のstatusで成功/失敗理由を表現する（セッション切れ・
+      // 入力不正も含む）。
+      const result = await approveDealerAssignment({ auctionId: secret.auctionId });
+      if (result.status === "ok") {
+        router.refresh();
+      } else {
+        setMessage(DEALER_ACTION_ERROR_MESSAGES[result.status]);
+        setIsSubmitting(false);
+      }
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setMessage("通信エラーが発生しました。もう一度お試しください");
       setIsSubmitting(false);
     }
   };
@@ -80,11 +90,17 @@ export function SecretDetailScreen({
   const handleDecline = async () => {
     if (!secret.auctionId) return;
     setIsSubmitting(true);
-    const result = await declineDealer({ auctionId: secret.auctionId });
-    if (result.status === "ok") {
-      router.push(backHref);
-    } else {
-      setMessage(DEALER_ACTION_ERROR_MESSAGES[result.status]);
+    try {
+      const result = await declineDealer({ auctionId: secret.auctionId });
+      if (result.status === "ok") {
+        router.push(backHref);
+      } else {
+        setMessage(DEALER_ACTION_ERROR_MESSAGES[result.status]);
+        setIsSubmitting(false);
+      }
+    } catch {
+      // Server Actionの通信失敗等、上記statusが返らない予期しない例外の保険。
+      setMessage("通信エラーが発生しました。もう一度お試しください");
       setIsSubmitting(false);
     }
   };

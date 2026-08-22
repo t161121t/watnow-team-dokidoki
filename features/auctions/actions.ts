@@ -29,8 +29,15 @@ function requireUserId(userId: string | null): asserts userId is string {
  * クライアントに届かなくなるため（2026-08-23、ユーザー報告で発覚。
  * join-via-link-screen.tsxのコメント参照）。日本語文言はクライアント側の
  * 呼び出し元コンポーネントで持つ。
+ *
+ * placeBid/approveDealerAssignment/declineDealerは、セッション切れ・入力
+ * 不正もPromise rejectさせずstatusで返す（PR #102レビュー指摘）。この3つに
+ * 新しいチェックを追加する際はrequireUserId()やzod .parse()（throw系）では
+ * なく、if文 + safeParse()でstatusを返すこと。
  */
 export type PlaceBidErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
   | "insufficient_balance"
   | "seller_cannot_bid"
   | "dealer_cannot_bid"
@@ -54,7 +61,10 @@ function mapPlaceBidErrorStatus(message: string): PlaceBidErrorStatus {
 }
 
 export type DealerActionErrorStatus =
+  | "not_authenticated"
+  | "invalid_input"
   | "not_authorized"
+  | "not_active_member"
   | "no_other_eligible_dealer"
   | "already_processed"
   | "unknown_error";
@@ -63,6 +73,7 @@ export type DealerActionResult = { status: "ok" } | { status: DealerActionErrorS
 
 function mapDealerActionErrorStatus(message: string): DealerActionErrorStatus {
   if (message.includes("not authorized")) return "not_authorized";
+  if (message.includes("not an active member")) return "not_active_member";
   if (message.includes("no other eligible dealer")) return "no_other_eligible_dealer";
   if (message.includes("already open") || message.includes("not pending approval")) {
     return "already_processed";
@@ -80,11 +91,13 @@ export async function approveDealerAssignment(input: {
   auctionId: string;
 }): Promise<DealerActionResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = auctionIdSchema.parse(input);
+  const parsed = auctionIdSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    await approveDealerAssignmentInDb(userId, parsed.auctionId);
+    await approveDealerAssignmentInDb(userId, parsed.data.auctionId);
     return { status: "ok" };
   } catch (error) {
     return { status: mapDealerActionErrorStatus(error instanceof Error ? error.message : "") };
@@ -97,11 +110,13 @@ export async function approveDealerAssignment(input: {
  */
 export async function declineDealer(input: { auctionId: string }): Promise<DealerActionResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = auctionIdSchema.parse(input);
+  const parsed = auctionIdSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    await declineDealerInDb(userId, parsed.auctionId);
+    await declineDealerInDb(userId, parsed.data.auctionId);
     return { status: "ok" };
   } catch (error) {
     return { status: mapDealerActionErrorStatus(error instanceof Error ? error.message : "") };
@@ -122,11 +137,13 @@ export async function placeBid(input: {
   amount: number;
 }): Promise<PlaceBidResult> {
   const userId = await getCurrentUserId();
-  requireUserId(userId);
+  if (!userId) return { status: "not_authenticated" };
 
-  const parsed = placeBidSchema.parse(input);
+  const parsed = placeBidSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
   try {
-    await placeBidInDb(userId, parsed.auctionId, parsed.amount);
+    await placeBidInDb(userId, parsed.data.auctionId, parsed.data.amount);
     return { status: "ok" };
   } catch (error) {
     return { status: mapPlaceBidErrorStatus(error instanceof Error ? error.message : "") };
