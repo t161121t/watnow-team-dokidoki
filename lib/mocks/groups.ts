@@ -5,6 +5,9 @@ import type {
 } from "@/lib/types/group";
 import { mockUsers } from "@/lib/mocks/users";
 
+/** モック上の選択中グループ。ログイン後はこのグループのホームへ進む。 */
+export const mockCurrentGroupId = "watnow";
+
 export const mockGroups: Group[] = [
   {
     id: "night-owls",

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -10,9 +11,8 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { NeonInput } from "@/components/ui/neon-field";
 import { Label } from "@/components/ui/label";
 import { GoogleContinueButton } from "@/features/auth/components/google-continue-button";
-import type { LoginInput } from "@/features/auth/validation";
-import { loginSchema } from "@/features/auth/validation";
-import { mockCurrentGroupId } from "@/lib/mocks/groups";
+import type { SignupInput } from "@/features/auth/validation";
+import { signupSchema } from "@/features/auth/validation";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -28,47 +28,74 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function LoginScreen() {
+export function SignupScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<SignupInput>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: { email: "", password: "", nickname: "" },
     mode: "onTouched",
   });
 
-  const submitLogin = () => {
+  const submitSignup = () => {
     setIsSubmitting(true);
-    window.setTimeout(() => router.push(`/groups/${mockCurrentGroupId}`), 450);
+    window.setTimeout(() => router.push("/groups/join"), 450);
   };
 
   return (
-    <main className="relative min-h-svh overflow-x-hidden bg-black text-white">
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-full max-w-[520px] -translate-x-1/2 bg-[url('/onboarding-background.png')] bg-[length:auto_120%] bg-bottom bg-no-repeat shadow-[0_0_90px_rgba(93,22,136,0.16)]">
-        <div className="absolute inset-0 bg-black/20" />
-      </div>
+    <main className="min-h-svh bg-black text-white">
       <section
-        className="relative mx-auto h-[max(880px,100svh)] w-[402px] max-w-full overflow-hidden bg-transparent"
-        data-node-id="178:39"
-        aria-labelledby="login-title"
+        className="relative mx-auto min-h-[max(880px,100svh)] w-[402px] max-w-full overflow-hidden bg-black"
+        aria-labelledby="signup-title"
       >
+        <Image
+          src="/onboarding-background.png"
+          alt=""
+          fill
+          priority
+          sizes="(max-width: 402px) 100vw, 402px"
+          className="pointer-events-none object-cover object-bottom"
+        />
+
         <h1
-          id="login-title"
-          className="absolute top-[133px] left-1/2 w-[min(324px,calc(100%-60px))] -translate-x-1/2 whitespace-nowrap text-center text-[clamp(31px,8.95vw,36px)] leading-normal font-bold [font-family:var(--font-noto-sans-jp)] [text-shadow:0_0_14px_rgba(208,66,255,0.9),0_0_50px_rgba(138,43,226,0.5)]"
+          id="signup-title"
+          className="absolute top-[88px] left-1/2 w-[min(324px,calc(100%-60px))] -translate-x-1/2 text-center text-[clamp(31px,8.95vw,36px)] leading-normal font-bold [font-family:var(--font-noto-sans-jp)] [text-shadow:0_0_14px_rgba(208,66,255,0.9),0_0_50px_rgba(138,43,226,0.5)]"
         >
-          秘密オークションへ
+          新規登録
         </h1>
-        <p className="absolute top-[193px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[clamp(31px,8.95vw,36px)] leading-normal font-bold [font-family:var(--font-noto-sans-jp)] [text-shadow:0_0_14px_rgba(208,66,255,0.9),0_0_50px_rgba(138,43,226,0.5)]">
-          ようこそ
-        </p>
 
         <form
-          id="login-form"
-          className="absolute top-[278px] left-[30px] w-[calc(100%-60px)] max-w-[342px]"
-          onSubmit={form.handleSubmit(submitLogin)}
+          className="absolute top-[188px] left-[30px] w-[calc(100%-60px)] max-w-[342px]"
+          onSubmit={form.handleSubmit(submitSignup)}
           noValidate
         >
           <div className="ml-[7px] flex w-full flex-col gap-1.5">
+            <Label
+              htmlFor="nickname"
+              className="text-[14px] leading-normal font-bold text-white [font-family:var(--font-noto-sans-jp)]"
+            >
+              ニックネーム
+            </Label>
+            <NeonInput
+              {...form.register("nickname")}
+              id="nickname"
+              type="text"
+              maxLength={20}
+              placeholder="表示名を入力"
+              autoComplete="nickname"
+              aria-invalid={Boolean(form.formState.errors.nickname)}
+              aria-describedby={
+                form.formState.errors.nickname ? "nickname-error" : undefined
+              }
+              className="h-14 py-[13px] text-[13.5px] leading-normal font-normal"
+            />
+            <FieldError
+              id="nickname-error"
+              message={form.formState.errors.nickname?.message}
+            />
+          </div>
+
+          <div className="mt-6 ml-[7px] flex w-full flex-col gap-1.5">
             <Label
               htmlFor="email"
               className="text-[14px] leading-normal font-bold text-white [font-family:var(--font-noto-sans-jp)]"
@@ -99,8 +126,8 @@ export function LoginScreen() {
               {...form.register("password")}
               id="password"
               type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
+              placeholder="8文字以上"
+              autoComplete="new-password"
               aria-invalid={Boolean(form.formState.errors.password)}
               aria-describedby={
                 form.formState.errors.password ? "password-error" : undefined
@@ -113,21 +140,14 @@ export function LoginScreen() {
             />
           </div>
 
-          <button
-            type="button"
-            className="mt-6 ml-auto block bg-transparent p-0 text-[14px] leading-normal font-bold text-white [font-family:var(--font-noto-sans-jp)]"
-          >
-            パスワードを忘れた方はこちら
-          </button>
-
           <NeonButton
             type="submit"
             disabled={isSubmitting}
             aria-busy={isSubmitting}
             size="lg"
-            className="mt-[22px] h-[77px] min-h-[77px] w-full py-[15px] text-[20px] leading-normal"
+            className="mt-[28px] h-[77px] min-h-[77px] w-full py-[15px] text-[20px] leading-normal"
           >
-            {isSubmitting ? "ログイン中…" : "ログイン"}
+            {isSubmitting ? "登録中…" : "登録する"}
           </NeonButton>
 
           <div
@@ -139,19 +159,15 @@ export function LoginScreen() {
             <span className="h-[1.5px] min-w-px flex-1 bg-[#b75ee3]" />
           </div>
 
-          <GoogleContinueButton href={`/groups/${mockCurrentGroupId}`} />
+          <GoogleContinueButton href="/groups/join" />
 
-          <p className="mt-3 flex items-start justify-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] leading-normal text-white [font-family:var(--font-noto-sans-jp)]">
-            <span className="font-medium">アカウントをお持ちでない方は</span>
-            <Link
-              href="/signup"
-              className="bg-transparent p-0 font-bold text-white"
-            >
-              新規登録
+          <p className="mt-6 flex items-start justify-center gap-1.5 overflow-hidden whitespace-nowrap text-[14px] leading-normal text-white [font-family:var(--font-noto-sans-jp)]">
+            <span className="font-medium">アカウントをお持ちの方は</span>
+            <Link href="/login" className="bg-transparent p-0 font-bold text-white">
+              ログイン
             </Link>
           </p>
         </form>
-
       </section>
     </main>
   );

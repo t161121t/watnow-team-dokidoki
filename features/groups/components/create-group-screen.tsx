@@ -13,7 +13,11 @@ import { cn } from "@/lib/utils";
 
 const groupIcons = ["🌙", "⚡️", "🎧", "🪩", "🎲", "👾"];
 
-export function CreateGroupScreen() {
+export function CreateGroupScreen({
+  backHref = "/groups",
+}: {
+  backHref?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
@@ -21,7 +25,7 @@ export function CreateGroupScreen() {
 
   return (
     <MobileShell>
-      <ScreenHeader title="グループを作る" backHref="/groups" />
+      <ScreenHeader title="グループを作る" backHref={backHref} />
 
       <ol className="mb-8 flex items-center justify-center" aria-label="作成ステップ">
         {[1, 2].map((item) => (
