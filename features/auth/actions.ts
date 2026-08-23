@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase/storage";
 import { createProfile } from "@/features/auth/server/create-profile";
 import { getProfile } from "@/features/auth/server/get-profile";
+import { updateProfile as updateProfileInDb } from "@/features/auth/server/update-profile";
 import { isSafeRedirectPath } from "@/lib/redirect-path";
 
 // ログイン後に戻したいページ。省略時はコールバック側で"/"にする。
@@ -285,6 +286,106 @@ export async function getCurrentUserProfile() {
     nickname: profile?.nickname ?? null,
     avatarPath: profile?.avatarPath ?? null,
   };
+}
+
+const updateProfileSchema = z.object({
+  nickname: z.string().trim().min(1).max(50).optional(),
+  avatarPath: z.string().trim().min(1).optional(),
+});
+
+export type UpdateProfileResult =
+  | { status: "ok" }
+  | { status: "not_authenticated" | "invalid_input" | "unknown_error" };
+
+/**
+ * アカウント設定（⑮）でのニックネーム・アイコン変更。throw/error.messageの
+ * 文字列比較には依存しない（本番ビルドではServer Actionのエラーメッセージが
+ * サニタイズされ判定できなくなるため。features/auctions/actions.ts等と同じ理由）。
+ */
+export async function updateProfile(input: {
+  nickname?: string;
+  avatarPath?: string;
+}): Promise<UpdateProfileResult> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { status: "not_authenticated" };
+
+  const parsed = updateProfileSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
+  try {
+    await updateProfileInDb(userId, parsed.data);
+    return { status: "ok" };
+  } catch {
+    return { status: "unknown_error" };
+  }
+}
+
+const updateEmailSchema = z.object({ email: z.string().trim().email() });
+
+export type UpdateEmailResult =
+  | { status: "confirmation_required" }
+  | { status: "not_authenticated" | "invalid_input" | "already_registered" | "rate_limited" | "unknown_error" };
+
+/**
+ * アカウント設定（⑮）でのメールアドレス変更。Supabase Authの仕様上、
+ * updateUser({email})を呼んだ時点では確定せず、新しいメールアドレス宛に
+ * 確認リンクが送られ、それを踏んだ時点（app/auth/callback/route.ts経由）で
+ * 初めて反映される（signUpWithPasswordの確認メールと同じ仕組み）。そのため
+ * ここでは"confirmation_required"のみを返し、呼び出し元は画面表示のメール
+ * アドレスをまだ書き換えない。
+ */
+export async function updateEmail(input: { email: string }): Promise<UpdateEmailResult> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { status: "not_authenticated" };
+
+  const parsed = updateEmailSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ email: parsed.data.email });
+
+  if (error) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes("already registered") || lower.includes("already exists")) {
+      return { status: "already_registered" };
+    }
+    if (lower.includes("rate limit")) {
+      return { status: "rate_limited" };
+    }
+    return { status: "unknown_error" };
+  }
+
+  return { status: "confirmation_required" };
+}
+
+const updatePasswordSchema = z.object({ password: z.string().min(8) });
+
+export type UpdatePasswordResult =
+  | { status: "ok" }
+  | { status: "not_authenticated" | "invalid_input" }
+  | { status: PasswordAuthErrorStatus };
+
+/**
+ * アカウント設定（⑮）でのパスワード変更。フォームで新しいパスワードを
+ * 明示的に入力・確認・送信した場合のみ呼ばれる想定（ボタン1つで即時変更
+ * されるUIにはしない。2026-08-23ユーザー報告: 誤操作/確認なしでの変更を
+ * 防ぐため）。
+ */
+export async function updatePassword(input: { password: string }): Promise<UpdatePasswordResult> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { status: "not_authenticated" };
+
+  const parsed = updatePasswordSchema.safeParse(input);
+  if (!parsed.success) return { status: "invalid_input" };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+
+  if (error) {
+    return { status: mapPasswordAuthErrorStatus(error.message) };
+  }
+
+  return { status: "ok" };
 }
 
 /**

@@ -19,6 +19,7 @@ export default async function SettingsPage({
         id: profile.id,
         nickname: profile.nickname ?? "ゲスト",
         email: profile.email,
+        avatarPath: profile.avatarPath,
       }}
       backHref={typeof from === "string" && isSafeRedirectPath(from) ? from : "/groups"}
       onLogout={signOut}

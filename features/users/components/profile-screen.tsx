@@ -19,7 +19,7 @@ export function ProfileScreen({
   collection,
 }: {
   groupId: string;
-  user: { id: string; nickname: string; email: string | null };
+  user: { id: string; nickname: string; email: string | null; avatarPath: string | null };
   balanceSection: ReactNode;
   collection: ProfileCollectionItem[];
 }) {
@@ -38,6 +38,7 @@ export function ProfileScreen({
         <Avatar
           initials={initialsFromNickname(user.nickname)}
           tone={avatarToneFromUserId(user.id)}
+          avatarPath={user.avatarPath}
           className="mx-auto size-20 text-xl shadow-xl"
         />
         <h2 className="mt-3 text-xl font-bold">{user.nickname}</h2>
