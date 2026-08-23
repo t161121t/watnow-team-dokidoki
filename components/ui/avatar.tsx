@@ -1,3 +1,4 @@
+import { publicAvatarUrl } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import type { User } from "@/lib/types/user";
 
@@ -11,12 +12,29 @@ const avatarTone: Record<User["avatarColor"], string> = {
 export function Avatar({
   initials,
   tone = "violet",
+  avatarPath,
   className,
 }: {
   initials: string;
   tone?: User["avatarColor"];
+  /** アップロード済みアイコンのStorage path。指定時は画像を表示する */
+  avatarPath?: string | null;
   className?: string;
 }) {
+  if (avatarPath) {
+    return (
+      <span
+        className={cn(
+          "inline-flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/35 shadow-lg",
+          className,
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={publicAvatarUrl(avatarPath)} alt="" className="size-full object-cover" />
+      </span>
+    );
+  }
+
   return (
     <span
       aria-hidden="true"
