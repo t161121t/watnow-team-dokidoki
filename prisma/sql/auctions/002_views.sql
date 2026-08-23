@@ -8,7 +8,15 @@
 -- 2026-08-18レビュー反映: bidder_identified_view は seller_id/dealer_id の一致だけで
 -- 判定しており、脱退/kick後も記録上のseller/dealerとして永続的に入札者を閲覧できて
 -- しまっていた。is_group_member(現在activeか)も条件に加える。
+--
+-- 2026-08-23 ユーザー報告反映: auction_public_viewはグループメンバー全員に見えるため、
+-- ここにsummary（ディーラー限定の補足説明。docs/DB.md §4.8参照）を含めていたのは
+-- 過剰公開だった。titleに差し替える。ディーラー自身がsummaryを読む経路は
+-- auction_dealer_summary_viewを新設して分離した。summary列をtitle列に
+-- 差し替えるため、CREATE OR REPLACEでは列名変更できずDROPしてから作り直す
+-- （PostgreSQL: cannot change name of view column）。
 
+DROP VIEW IF EXISTS auction_public_view;
 CREATE OR REPLACE VIEW auction_public_view AS
 SELECT
   a.id AS auction_id,
@@ -18,7 +26,7 @@ SELECT
   a.dealer_id,
   s.category,
   s.rarity,
-  s.summary,
+  s.title,
   a.status,
   a.current_price,
   a.starts_at,
@@ -28,6 +36,19 @@ FROM auctions a
 JOIN secret_group_items sgi ON sgi.id = a.secret_group_item_id
 JOIN secrets s ON s.id = sgi.secret_id
 WHERE is_group_member(a.group_id);
+
+-- summary（ディーラー限定の補足説明）は担当ディーラー本人にのみ公開する。
+-- bidder_identified_viewと同種の「本人限定でsecretsテーブルを横断参照する」
+-- パターン（このファイル冒頭のコメント参照）。
+DROP VIEW IF EXISTS auction_dealer_summary_view;
+CREATE OR REPLACE VIEW auction_dealer_summary_view AS
+SELECT
+  a.id AS auction_id,
+  s.summary
+FROM auctions a
+JOIN secret_group_items sgi ON sgi.id = a.secret_group_item_id
+JOIN secrets s ON s.id = sgi.secret_id
+WHERE is_group_member(a.group_id) AND a.dealer_id = auth.uid();
 
 CREATE OR REPLACE VIEW bidder_identified_view AS
 SELECT
@@ -54,5 +75,6 @@ JOIN auctions a ON a.id = b.auction_id
 WHERE is_group_member(a.group_id);
 
 GRANT SELECT ON auction_public_view TO authenticated;
+GRANT SELECT ON auction_dealer_summary_view TO authenticated;
 GRANT SELECT ON bidder_identified_view TO authenticated;
 GRANT SELECT ON anonymous_bid_feed_view TO authenticated;

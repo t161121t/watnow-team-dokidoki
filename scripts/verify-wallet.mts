@@ -62,7 +62,7 @@ async function main() {
   // --- dealer1が選ばれるまでリトライして辞退させ、dealer_decline_feeのwallet_ledgerを作る ---
   const [item] = await withRlsContext(seller, (tx) =>
     tx.$queryRaw<{ id: string }[]>`
-      SELECT * FROM register_secret(${groupId}::uuid, 'body', 'summary', 'category', ${3}, ${100})
+      SELECT * FROM register_secret(${groupId}::uuid, 'body', 'title', 'summary', 'category', ${3}, ${100})
     `,
   );
 

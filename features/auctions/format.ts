@@ -31,7 +31,7 @@ export function toAuction(row: AuctionPublicViewRow, isLeading: boolean): Auctio
     id: row.auction_id,
     groupId: row.group_id,
     secretId: row.secret_group_item_id,
-    summary: row.summary,
+    title: row.title,
     category: row.category,
     rarity: row.rarity as 1 | 2 | 3 | 4 | 5,
     currentPrice: row.current_price,

@@ -10,7 +10,7 @@ import { NeonLink } from "@/components/ui/neon-button";
 import { avatarToneFromUserId, initialsFromNickname } from "@/lib/avatar";
 import { getGroupNavigation } from "@/lib/navigation";
 
-export type ProfileCollectionItem = { id: string; summary: string };
+export type ProfileCollectionItem = { id: string; title: string };
 
 export function ProfileScreen({
   groupId,
@@ -79,7 +79,7 @@ export function ProfileScreen({
               className="block"
             >
               <NeonCard className="p-4">
-                <p className="line-clamp-2 text-sm leading-5 font-bold">{secret.summary}</p>
+                <p className="line-clamp-2 text-sm leading-5 font-bold">{secret.title}</p>
               </NeonCard>
             </Link>
           ))

@@ -68,7 +68,7 @@ async function main() {
   // --- 出品（dealer1が選ばれるまでリトライ。プールはdealer1/dealer2/bidderの3人） ---
   const [item] = await withRlsContext(seller, (tx) =>
     tx.$queryRaw<{ id: string; secret_id: string }[]>`
-      SELECT * FROM register_secret(${groupId}::uuid, 'body', 'summary', 'category', ${3}, ${100})
+      SELECT * FROM register_secret(${groupId}::uuid, 'body', 'title', 'summary', 'category', ${3}, ${100})
     `,
   );
 

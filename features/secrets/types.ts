@@ -7,6 +7,7 @@ export type SecretRow = {
   id: string;
   owner_id: string;
   body: string;
+  title: string;
   summary: string;
   category: string;
   rarity: number;
@@ -72,7 +73,7 @@ export type MySecretCollectionRow = {
   secret_id: string;
   category: string;
   rarity: number;
-  summary: string;
+  title: string;
   body: string;
   seller_id: string;
   granted_at: Date | null;
@@ -88,7 +89,7 @@ export type SecretListItem = {
   id: string;
   groupId: string;
   viewRole: "owner" | "dealer" | "winner";
-  summary: string;
+  title: string;
   category: string;
   rarity: number;
   value: number;

@@ -49,7 +49,7 @@ export default async function AuctionRoomPage({
       auction={{
         id: auction.auction_id,
         groupId: auction.group_id,
-        summary: auction.summary,
+        title: auction.title,
         category: auction.category,
         rarity: auction.rarity,
         status: auction.status,

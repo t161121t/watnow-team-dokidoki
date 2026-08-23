@@ -30,7 +30,7 @@ export function SecretCard({
             </span>
           </div>
         ) : null}
-        <h3 className="line-clamp-2 text-sm leading-6 font-bold">{secret.summary}</h3>
+        <h3 className="line-clamp-2 text-sm leading-6 font-bold">{secret.title}</h3>
         <div className="mt-3 flex items-center justify-between text-[11px] text-white/48">
           <span>{secret.category}</span>
           <StarRating value={secret.rarity} label="レア度" />

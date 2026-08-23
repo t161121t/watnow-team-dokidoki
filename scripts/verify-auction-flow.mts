@@ -45,7 +45,7 @@ async function main() {
 
   // 秘密を登録・出品（asking_price=100 → 前払い100がsellerに入る）
   const [item] = await withRlsContext(seller, (tx) =>
-    tx.$queryRaw<{ id: string }[]>`SELECT * FROM register_secret(${groupId}::uuid, 'body', 'summary', 'category', 3, 100)`,
+    tx.$queryRaw<{ id: string }[]>`SELECT * FROM register_secret(${groupId}::uuid, 'body', 'title', 'summary', 'category', 3, 100)`,
   );
 
   const sellerWalletAfterPrepay = await prisma.wallet.findUniqueOrThrow({

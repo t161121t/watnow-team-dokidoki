@@ -30,7 +30,9 @@ export type SecretDetailData = {
   secretGroupItemId: string;
   auctionId: string | null;
   viewRole: "owner" | "dealer";
-  summary: string;
+  title: string;
+  /** ディーラー限定の補足説明。ownerは常に非null、dealerは担当時のみ非null */
+  summary: string | null;
   body: string | null;
   category: string;
   rarity: number;
@@ -117,7 +119,7 @@ export function SecretDetailScreen({
           <p className="text-[10px] text-white/40">秘密の見出し</p>
           <span className="text-[10px] font-bold text-[#e591ff]">{secret.statusLabel}</span>
         </div>
-        <h2 className="text-lg leading-7 font-bold">{secret.summary}</h2>
+        <h2 className="text-lg leading-7 font-bold">{secret.title}</h2>
         <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
           <div>
             <p className="text-white/38">カテゴリ</p>
@@ -129,6 +131,15 @@ export function SecretDetailScreen({
           </div>
         </div>
       </NeonCard>
+
+      {secret.summary !== null ? (
+        <NeonCard className="mt-4 p-5">
+          <p className="text-[10px] text-white/40">概要（ディーラー限定）</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">
+            {secret.summary}
+          </p>
+        </NeonCard>
+      ) : null}
 
       {secret.body !== null ? (
         <NeonCard className="mt-4 p-5">
