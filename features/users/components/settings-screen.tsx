@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Camera } from "lucide-react";
 
 import { MobileShell } from "@/components/layout/mobile-shell";
 import { ScreenHeader } from "@/components/layout/screen-header";
@@ -405,12 +406,24 @@ export function SettingsScreen({
       <ScreenHeader title="アカウント設定" backHref={backHref} />
 
       <div className="mb-7 text-center">
-        <Avatar
-          initials={initialsFromNickname(user.nickname)}
-          tone={avatarToneFromUserId(user.id)}
-          avatarPath={avatarPath}
-          className="mx-auto size-24 text-2xl"
-        />
+        <button
+          type="button"
+          disabled={isUploadingAvatar}
+          aria-busy={isUploadingAvatar}
+          aria-label="アイコンを変更"
+          onClick={() => fileInputRef.current?.click()}
+          className="group relative mx-auto block size-24 shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c038ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#090b0e] disabled:opacity-60"
+        >
+          <Avatar
+            initials={initialsFromNickname(user.nickname)}
+            tone={avatarToneFromUserId(user.id)}
+            avatarPath={avatarPath}
+            className="size-24 text-2xl transition group-hover:brightness-90"
+          />
+          <span className="absolute right-0 bottom-0 flex size-8 items-center justify-center rounded-full border border-white/35 bg-[#14031c] text-white shadow-[0_0_10px_rgba(192,56,255,0.55)]">
+            <Camera aria-hidden="true" className="size-4" strokeWidth={2.25} />
+          </span>
+        </button>
         <input
           ref={fileInputRef}
           type="file"
@@ -418,16 +431,9 @@ export function SettingsScreen({
           className="hidden"
           onChange={handleAvatarFileChange}
         />
-        <NeonButton
-          variant="secondary"
-          size="sm"
-          className="mt-4"
-          disabled={isUploadingAvatar}
-          aria-busy={isUploadingAvatar}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {isUploadingAvatar ? "アップロード中…" : "変更"}
-        </NeonButton>
+        {isUploadingAvatar ? (
+          <p className="mt-2 text-[12px] font-bold text-white/55">アップロード中…</p>
+        ) : null}
         {avatarError ? (
           <p role="alert" className="mt-2 text-[12px] font-bold text-[#ffb4c9]">
             {avatarError}
