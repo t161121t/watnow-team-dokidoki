@@ -244,6 +244,9 @@ model Secret {
   id        String    @id @default(uuid()) @db.Uuid
   ownerId   String    @map("owner_id") @db.Uuid
   body      String
+  /// 一覧・オークション会場等で全員に公開される見出し
+  title     String
+  /// ディーラーのみに公開される補足説明（本人＋担当ディーラー限定）
   summary   String
   category  String
   /// 自己申告。1-5

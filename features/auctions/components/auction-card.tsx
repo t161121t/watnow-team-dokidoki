@@ -15,7 +15,7 @@ export function AuctionCard({ auction }: { auction: Auction }) {
             {auction.remainingLabel}
           </span>
         </div>
-        <h3 className="line-clamp-2 text-sm leading-6 font-bold">{auction.summary}</h3>
+        <h3 className="line-clamp-2 text-sm leading-6 font-bold">{auction.title}</h3>
         <div className="mt-4 flex items-end justify-between border-t border-white/10 pt-3">
           <div>
             <p className="text-[10px] text-white/45">現在価格</p>

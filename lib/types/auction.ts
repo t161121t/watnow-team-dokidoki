@@ -9,7 +9,7 @@ export type Auction = {
   id: string;
   groupId: string;
   secretId: string;
-  summary: string;
+  title: string;
   category: string;
   rarity: 1 | 2 | 3 | 4 | 5;
   currentPrice: number;

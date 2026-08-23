@@ -34,7 +34,7 @@ const PLACE_BID_ERROR_MESSAGES: Record<PlaceBidErrorStatus, string> = {
 export type RoomAuction = {
   id: string;
   groupId: string;
-  summary: string;
+  title: string;
   category: string;
   rarity: number;
   status: AuctionStatus;
@@ -193,7 +193,7 @@ export function AuctionRoomScreen({
 
       <NeonCard className="p-5">
         <p className="text-[10px] text-white/40">秘密の見出し</p>
-        <h2 className="mt-2 text-lg leading-7 font-bold">{auction.summary}</h2>
+        <h2 className="mt-2 text-lg leading-7 font-bold">{auction.title}</h2>
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
           <div>
             <p className="text-white/40">カテゴリ</p>

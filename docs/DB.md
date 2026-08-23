@@ -418,7 +418,8 @@ RLS:
 | `id`         | `uuid`        | PK                                         |
 | `owner_id`   | `uuid`        | FK `users.id`                           |
 | `body`       | `text`        | 秘密本文。落札まで秘匿                                |
-| `summary`    | `text`        | ディーラー・一覧用の概要。本文を直接含めすぎない                   |
+| `title`      | `text`        | 一覧・オークション会場等で全員に公開される見出し（2026-08-23追加）         |
+| `summary`    | `text`        | ディーラーが承認判断のために読む補足説明。本人＋担当ディーラー限定（`auction_dealer_summary_view`、§5.1参照）。2026-08-23より前は一覧の見出しとしても使われていたが分離した |
 | `category`   | `text`        | 恋愛 / 黒歴史 / 趣味 / 特技など。初期は text、安定後 lookup 化 |
 | `rarity`     | `smallint`    | 自己申告。例: 1-5                                |
 | `created_at` | `timestamptz` | not null                                   |
@@ -729,7 +730,7 @@ Storage bucket:
 - `dealer_id`
 - `category`
 - `rarity`
-- `summary`
+- `title`
 - `status`
 - `current_price`
 - `starts_at`
@@ -739,7 +740,16 @@ Storage bucket:
 含めない:
 
 - 秘密本文
+- `summary`（ディーラー限定。2026-08-23より前はここに含めていたが過剰公開だったため`auction_dealer_summary_view`へ分離）
 - 入札者 ID
+
+#### `auction_dealer_summary_view`（2026-08-23追加）
+
+担当ディーラー本人にのみ `summary` を公開する。`bidder_identified_view` と同種の
+「本人限定で secrets テーブルを横断参照する」パターン。
+
+含める: `auction_id`, `summary`
+WHERE: `is_group_member(group_id) AND dealer_id = auth.uid()`
 
 
 
@@ -791,10 +801,13 @@ RLS / view 条件:
 - `secret_id`
 - `category`
 - `rarity`
-- `summary`
+- `title`
 - `body`
 - `seller_id`
 - `granted_at`（`auctions.finalized_at`）
+
+`summary`（ディーラー限定）は含めない（2026-08-23追加。owner は
+`secrets` テーブルへの直接アクセス経路で別途参照できる）。
 
 条件（2026-08-17: `secret_accesses` 廃止に伴い変更）:
 
@@ -839,7 +852,7 @@ RLS / view 条件:
 
 | RPC                                                                        | 責務                                                 |
 | -------------------------------------------------------------------------- | -------------------------------------------------- |
-| `register_secret(group_id, body, summary, category, rarity, asking_price)` | secrets と secret_group_items を作成。MVP は選択中 group のみ |
+| `register_secret(group_id, body, title, summary, category, rarity, asking_price)` | secrets と secret_group_items を作成。MVP は選択中 group のみ |
 | `update_secret_before_listing(secret_id, ...)`                             | 出品前のみ編集                                            |
 | `delete_secret_before_listing(secret_id)`                                  | 出品前のみ soft delete                                  |
 | `publish_secret_to_group(secret_id, group_id, asking_price)`               | Phase 2 の複数 group 公開用                              |

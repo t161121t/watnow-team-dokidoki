@@ -73,28 +73,28 @@ async function main() {
   await assertRejects(
     () =>
       withRlsContext(outsider, (tx) =>
-        tx.$executeRaw`SELECT register_secret(${groupId}::uuid, 'body', 'summary', 'category', ${validRarity}, ${validAskingPrice})`,
+        tx.$executeRaw`SELECT register_secret(${groupId}::uuid, 'body', 'title', 'summary', 'category', ${validRarity}, ${validAskingPrice})`,
       ),
     "register_secret: 非メンバーは登録できない",
   );
   await assertRejects(
     () =>
       withRlsContext(seller, (tx) =>
-        tx.$executeRaw`SELECT register_secret(${groupId}::uuid, 'body', 'summary', 'category', ${outOfRangeRarity}, ${validAskingPrice})`,
+        tx.$executeRaw`SELECT register_secret(${groupId}::uuid, 'body', 'title', 'summary', 'category', ${outOfRangeRarity}, ${validAskingPrice})`,
       ),
     "register_secret: rarityが範囲外（6）だと拒否される",
   );
   await assertRejects(
     () =>
       withRlsContext(seller, (tx) =>
-        tx.$executeRaw`SELECT register_secret(${groupId}::uuid, 'body', 'summary', 'category', ${validRarity}, ${negativeAskingPrice})`,
+        tx.$executeRaw`SELECT register_secret(${groupId}::uuid, 'body', 'title', 'summary', 'category', ${validRarity}, ${negativeAskingPrice})`,
       ),
     "register_secret: asking_priceが負だと拒否される",
   );
 
   const [toDelete] = await withRlsContext(seller, (tx) =>
     tx.$queryRaw<{ id: string; secret_id: string }[]>`
-      SELECT * FROM register_secret(${groupId}::uuid, 'delete me', 'summary', 'category', ${2}, ${50})
+      SELECT * FROM register_secret(${groupId}::uuid, 'delete me', 'title', 'summary', 'category', ${2}, ${50})
     `,
   );
 
@@ -115,13 +115,13 @@ async function main() {
   // --- register_secret（出品〜落札まで進める本命） / update_secret_before_listing ---
   const [item] = await withRlsContext(seller, (tx) =>
     tx.$queryRaw<{ id: string; secret_id: string }[]>`
-      SELECT * FROM register_secret(${groupId}::uuid, 'original body', 'original summary', 'category', ${validRarity}, ${validAskingPrice})
+      SELECT * FROM register_secret(${groupId}::uuid, 'original body', 'original title', 'original summary', 'category', ${validRarity}, ${validAskingPrice})
     `,
   );
 
   const updated = await withRlsContext(seller, (tx) =>
     tx.$queryRaw<{ body: string }[]>`
-      SELECT * FROM update_secret_before_listing(${item.secret_id}::uuid, 'updated body', NULL, NULL, ${null}, ${null})
+      SELECT * FROM update_secret_before_listing(${item.secret_id}::uuid, 'updated body', NULL, NULL, NULL, ${null}, ${null})
     `,
   );
   assert(updated[0]?.body === "updated body", "update_secret_before_listing: registered状態なら編集できる");
@@ -164,7 +164,7 @@ async function main() {
   await assertRejects(
     () =>
       withRlsContext(seller, (tx) =>
-        tx.$executeRaw`SELECT update_secret_before_listing(${item.secret_id}::uuid, 'too late', NULL, NULL, NULL, NULL)`,
+        tx.$executeRaw`SELECT update_secret_before_listing(${item.secret_id}::uuid, 'too late', NULL, NULL, NULL, NULL, NULL)`,
       ),
     "update_secret_before_listing: listed後は編集できない",
   );

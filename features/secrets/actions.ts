@@ -18,6 +18,7 @@ function requireUserId(userId: string | null): asserts userId is string {
 const registerSecretSchema = z.object({
   groupId: z.string().uuid(),
   body: z.string().trim().min(1),
+  title: z.string().trim().min(1).max(60),
   summary: z.string().trim().min(1),
   category: z.string().trim().min(1),
   rarity: z.number().int().min(1).max(5),
@@ -28,6 +29,7 @@ const registerSecretSchema = z.object({
 export async function registerSecret(input: {
   groupId: string;
   body: string;
+  title: string;
   summary: string;
   category: string;
   rarity: number;
@@ -41,6 +43,7 @@ export async function registerSecret(input: {
     userId,
     parsed.groupId,
     parsed.body,
+    parsed.title,
     parsed.summary,
     parsed.category,
     parsed.rarity,
@@ -51,6 +54,7 @@ export async function registerSecret(input: {
 const updateSecretBeforeListingSchema = z.object({
   secretId: z.string().uuid(),
   body: z.string().trim().min(1).optional(),
+  title: z.string().trim().min(1).max(60).optional(),
   summary: z.string().trim().min(1).optional(),
   category: z.string().trim().min(1).optional(),
   rarity: z.number().int().min(1).max(5).optional(),
@@ -64,6 +68,7 @@ const updateSecretBeforeListingSchema = z.object({
 export async function updateSecretBeforeListing(input: {
   secretId: string;
   body?: string;
+  title?: string;
   summary?: string;
   category?: string;
   rarity?: number;

@@ -50,7 +50,7 @@ export async function SecretViewerScreen({
 
   const secret = {
     groupId,
-    summary: item.summary,
+    title: item.title,
     body: item.body,
     category: item.category,
     rarity: item.rarity,
@@ -75,7 +75,7 @@ export async function SecretViewerScreen({
       <NeonCard className="overflow-hidden">
         <div className="border-b border-white/10 p-5">
           <p className="text-[10px] text-white/40">秘密の見出し</p>
-          <h3 className="mt-2 text-lg leading-7 font-bold">{secret.summary}</h3>
+          <h3 className="mt-2 text-lg leading-7 font-bold">{secret.title}</h3>
         </div>
         <div className="p-5">
           <p className="text-[10px] text-[#e591ff]">秘密の本文</p>

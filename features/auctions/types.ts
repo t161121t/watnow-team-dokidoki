@@ -63,13 +63,22 @@ export type AuctionPublicViewRow = {
   dealer_id: string;
   category: string;
   rarity: number;
-  summary: string;
+  title: string;
   status: AuctionStatus;
   current_price: number;
   starts_at: Date | null;
   ends_at: Date | null;
   // count(*)の結果（int8）。Prismaはbigintとして返す。
   bid_count: bigint;
+};
+
+/**
+ * auction_dealer_summary_view（担当ディーラー本人にのみ公開されるsummary）。
+ * auction_idが一致しなければ非担当ディーラー（そもそも行が返らない）。
+ */
+export type AuctionDealerSummaryViewRow = {
+  auction_id: string;
+  summary: string;
 };
 
 export type BidderIdentifiedViewRow = {

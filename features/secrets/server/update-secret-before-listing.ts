@@ -4,6 +4,7 @@ import type { SecretRow } from "@/features/secrets/types";
 
 export type UpdateSecretBeforeListingInput = {
   body?: string;
+  title?: string;
   summary?: string;
   category?: string;
   rarity?: number;
@@ -20,6 +21,7 @@ export async function updateSecretBeforeListing(
       SELECT * FROM update_secret_before_listing(
         ${secretId}::uuid,
         ${input.body ?? null},
+        ${input.title ?? null},
         ${input.summary ?? null},
         ${input.category ?? null},
         ${input.rarity ?? null}::int,

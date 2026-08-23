@@ -53,7 +53,7 @@ export default async function SecretsPage({
     id: row.secret_group_item_id,
     groupId,
     viewRole: "dealer",
-    summary: row.summary,
+    title: row.title,
     category: row.category,
     rarity: row.rarity,
     value: row.current_price,

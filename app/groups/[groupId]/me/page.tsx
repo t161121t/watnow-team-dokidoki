@@ -27,7 +27,7 @@ export default async function MyPage({
   const winnings = await listMyWinnings({ groupId });
   const collection: ProfileCollectionItem[] = winnings.map((row) => ({
     id: row.secret_id,
-    summary: row.summary,
+    title: row.title,
   }));
 
   return (

@@ -99,6 +99,7 @@ function CreateSecretForm({
   onComplete: () => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
+  const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<SecretCategory>("黒歴史");
@@ -109,7 +110,10 @@ function CreateSecretForm({
   const numericPrice = Number(price);
   const isPriceValid = Number.isInteger(numericPrice) && numericPrice > 0;
   const canContinue =
-    summary.trim().length > 0 && body.trim().length > 0 && isPriceValid;
+    title.trim().length > 0 &&
+    summary.trim().length > 0 &&
+    body.trim().length > 0 &&
+    isPriceValid;
 
   const handleRegister = async () => {
     setError(null);
@@ -118,6 +122,7 @@ function CreateSecretForm({
       await registerSecret({
         groupId,
         body,
+        title,
         summary,
         category,
         rarity,
@@ -154,13 +159,22 @@ function CreateSecretForm({
 
       {step === 1 ? (
         <div className="space-y-6">
+          <NeonField id="secret-title" label="タイトル">
+            <NeonInput
+              id="secret-title"
+              value={title}
+              maxLength={60}
+              placeholder="一覧やオークション会場に表示される見出し"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </NeonField>
           <NeonField id="secret-summary" label="秘密の概要">
             <NeonTextarea
               id="secret-summary"
               value={summary}
               maxLength={120}
               className="min-h-28"
-              placeholder="秘密の内容を短く説明（ディーラーが閲覧できます）"
+              placeholder="秘密の内容を短く説明（担当ディーラーにのみ公開されます）"
               onChange={(event) => setSummary(event.target.value)}
             />
           </NeonField>
@@ -230,7 +244,10 @@ function CreateSecretForm({
       ) : (
         <div className="space-y-5">
           <NeonCard className="p-5">
-            <p className="text-[10px] text-white/40">概要</p>
+            <p className="text-[10px] text-white/40">タイトル</p>
+            <p className="mt-2 text-sm leading-6 font-bold text-white/90">{title}</p>
+            <div className="my-4 h-px bg-white/10" />
+            <p className="text-[10px] text-white/40">概要（ディーラー限定）</p>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">
               {summary}
             </p>
