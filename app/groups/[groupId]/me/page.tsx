@@ -37,6 +37,7 @@ export default async function MyPage({
         id: profile.id,
         nickname: profile.nickname ?? "ゲスト",
         email: profile.email,
+        avatarPath: profile.avatarPath,
       }}
       balanceSection={<WalletBalance groupId={groupId} className="mt-1 font-black" />}
       collection={collection}

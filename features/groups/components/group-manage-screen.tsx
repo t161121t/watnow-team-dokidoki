@@ -72,6 +72,7 @@ export async function GroupManageScreen({ groupId }: { groupId: string }) {
               <Avatar
                 initials={initialsFromNickname(member.user.nickname)}
                 tone={avatarToneFromUserId(member.userId)}
+                avatarPath={member.user.avatarPath}
                 className="size-10"
               />
               <p className="min-w-0 flex-1 truncate text-sm font-bold">
