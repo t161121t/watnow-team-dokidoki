@@ -1,21 +1,21 @@
 -- docs/DB.md §4.8, §4.9, §7.2
+--
+-- 2026-08-23 Codexレビュー指摘反映: このRLSはRow単位の制御で列単位では制御できない
+-- ため、winnerにこのpolicy経由でsecrets行へのSELECTを許すと、PostgRESTの
+-- /rest/v1/secrets経由でsummary（ディーラー限定にしたい列。docs/DB.md §4.8参照）
+-- まで直接読めてしまっていた（my_secret_collection_viewがsummaryを含めなく
+-- しても、base tableへの直接アクセス経路は別途残っていたため無意味だった）。
+-- winnerのsecrets参照はmy_secret_collection_view（summaryを含まない）経由に
+-- 一本化し、ここではowner本人のみ許可する。
 
 ALTER TABLE secrets ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS secrets_select_owner_or_winner ON secrets;
-CREATE POLICY secrets_select_owner_or_winner ON secrets
+DROP POLICY IF EXISTS secrets_select_owner ON secrets;
+CREATE POLICY secrets_select_owner ON secrets
   FOR SELECT
   TO authenticated
-  USING (
-    owner_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM auctions a
-      JOIN secret_group_items sgi ON sgi.id = a.secret_group_item_id
-      WHERE sgi.secret_id = secrets.id
-        AND a.status = 'sold'
-        AND a.winner_id = auth.uid()
-    )
-  );
+  USING (owner_id = auth.uid());
 
 DROP POLICY IF EXISTS secrets_insert_own ON secrets;
 CREATE POLICY secrets_insert_own ON secrets
