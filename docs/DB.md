@@ -1,48 +1,19 @@
 # DB 設計 — 秘密オークション（仮）
 
-ステータス: 設計ドラフト v6（issue #71: 招待方式をURL招待方式に置き換え。2026-08-22）  
+ステータス: 確定（v6 + 2026-08-23 の変更を反映。2026-09-30 に実装との食い違いを解消）  
 作成日: 2026-08-16  
-更新日: 2026-08-22  
+更新日: 2026-09-30  
 対象: Supabase PostgreSQL / Auth / Realtime / Storage  
+実装: テーブル定義は `prisma/schema.prisma`、RPC・RLS・View は `prisma/sql/<domain>/`。本書と食い違ったら実装（と本書）を直す。
 
-v2 での主な変更点:
+現行仕様の要点（経緯は末尾 §16 の変更履歴）:
 
-- P1 確定に伴い、オークション開始を「固定待機時間」から「ディーラー承認によるイベント駆動」に変更（§3 `auction_status`、§4.10、§6.2、§6.3、§10 を変更）
-- P9 確定（ディーラーへの入札者開示）に伴い、`seller_bid_view` をディーラーも見られるよう変更（§5.2）
-- DB-4 確定（AI validation は MVP 対象外）に伴い、`validation_status` 関連カラム・enum を削除（§3、§4.9、§15）
-- DB-6 / DB-7 確定（残高公開・コメント/リアクションは作らない）を §15 に明記
-- P2–P7・P11・P12 の確定値を `group_auction_settings` の既定値・各種計算ロジックに反映
-
-v3 での主な変更点（ハッカソンMVP向けスコープ削減。§14参照）:
-
-- `group_invites`（招待コード）を廃止し、直接招待方式に変更（`group_members.status` に `invited` を追加。§4.3、§4.4、§6.1）
-- `group_auction_settings` テーブルを廃止。P2（`auction_open_seconds`）のみ `groups` にカラムとして持ち、他の固定値はアプリ定数化（§4.5）
-- チャレンジ承認を単一承認に確定（`required_approvals` カラム廃止。§4.14、§6.4）
-- 次点繰り上げ（§10.2.1）・落札確定の2段階化（§10.2）は維持（変更なし）
-
-v4 での主な変更点（テーブル統合。DB-13参照）:
-
-- `secret_accesses` を廃止し `auctions.winner_id` に統合（冗長データの解消。§4.12）
-- `dealer_declines` を廃止し `wallet_ledger`（`kind='dealer_decline_fee'`）に統合。代わりに出品者向けの `get_dealer_decline_history` RPC を新設（§4.13、§6.3。2026-08-17レビュー反映: 当初のview案からRPC案に変更）
-- `challenge_approvals` を廃止し `challenge_attempts.reviewed_by`/`reviewed_decision`/`reviewed_at` に統合（単一承認確定に伴う自然な帰結。§4.16）
-- `secret_group_items.seller_id` を削除（`secrets.owner_id` への3NF違反的な冗長列だったため。§4.9）
-- テーブル数: 17見出し（廃止済みの欠番5つ: group_invites, group_auction_settings, secret_accesses, dealer_declines, challenge_approvals・任意追加のstorage_objects_metaを含む）→ 実質11テーブル（+ 任意でstorage_objects_meta）。内訳: users, groups, group_members, wallets, wallet_ledger, secrets, secret_group_items, auctions, bids, challenges, challenge_attempts
-
-v5 での主な変更点（PR #19 のレビュー指摘8件を反映）:
-
-- Codex指摘: `PRD.md`/`TRD.md`/`画面.md`/`機能要件.md`に残っていた招待コード・`group_auction_settings`前提の記述を、直接招待方式・アプリ定数の実態に合わせて修正
-- Codex指摘: `lib/auction-constants.ts` はドメイン非依存インフラ用の`lib/`に置くべきでないため、`features/auctions/constants.ts` へ移動（ESLint boundariesに`feature-shared`型を追加）
-- レビュー指摘: `invite_member`の再招待時（脱退/kick後の再招待）の状態遷移を明記。wallet再利用時は`balance=0`にリセット（ポイント非持ち越し）
-- レビュー指摘: `dealer_decline_history_view`案はRLS迂回リスクがあるため撤回し、`get_dealer_decline_history` RPCに変更
-- レビュー指摘: チャレンジ却下時（`decision='rejected'`）の`status`遷移が未定義だったため追加
-- レビュー指摘: `search_users`をgroup admin限定・最低検索文字数・件数上限付きに変更（ユーザー列挙API化を防止）
-- レビュー指摘: `groups.auction_open_seconds`に`CHECK (> 0)`制約を追加
-
-v6 での主な変更点（issue #71: 招待方式の変更）:
-
-- 2026-08-17に確定した直接招待方式（ニックネーム検索 `search_users` + `invite_member` + `accept_invite`/`decline_invite`）を廃止し、**URL招待方式**（`group_invite_links` + `create_group_invite_link` / `revoke_group_invite_link` / `join_group_via_invite_link`）に完全に置き換えた（ユーザー判断。§4.3、§4.4、§6.1）
-- `join_group_via_invite_link` は旧 `invite_member`＋`accept_invite` の2段階を1つの自己申告RPCに統合。参加は `invited` を経由せず直接 `active` になる
-- リンクは有効期限・使用回数制限を持たない。再発行（upsert）で旧リンクは自動失効。取り消しは行削除のみ（2026-08-17時点の「過剰」判断を踏まえ、実装自体は最小限に留めた）
+- テーブルは実質 12 個: `users` / `groups` / `group_members` / `group_invite_links` / `wallets` / `wallet_ledger` / `secrets` / `secret_group_items` / `auctions` / `bids` / `challenges` / `challenge_attempts`（＋任意で `storage_objects_meta`）。見出し番号が飛んでいるのは廃止したテーブルの欠番（§4.5・§4.12・§4.13・§4.16）
+- 招待は **URL 招待方式**（`group_invite_links`。グループごとに最大1リンク）。参加は `join_group_via_invite_link` で直接 `active` になる
+- オークションは **ディーラー承認でイベント駆動に開始**（P1）。前払いは承認時に credit（2026-08-23〜）
+- 落札確定は 2 段階（`claim_auction_for_finalize` → `finalize_auction`）で、残高不足なら次点繰り上げ
+- チャレンジ承認は **単一承認**（`challenge_attempts.reviewed_*` に記録）
+- 固定パラメータ（P3〜P7・P9・P11・P12）は DB に持たずアプリ定数（`features/auctions/constants.ts`）と SQL のリテラルで保持。DB に持つのは `groups.auction_open_seconds`（P2）のみ
 
 ---
 
@@ -133,7 +104,8 @@ auctions
   （winner_id が閲覧権の正本。旧 secret_accesses）
 
 groups
-  1 ─ * challenges
+  1 ─ * group_invite_links（実際は 1 ─ 0..1）
+  1 ─ * challenges（`challenges.group_id` は nullable。null は全グループ共通のシステムチャレンジなので 0..1 の関係）
   1 ─ * challenge_attempts
   （reviewed_by が承認者。旧 challenge_approvals）
 
@@ -162,6 +134,8 @@ wallets
 | `challenge_status`   | `active`, `archived`                                                                                                                                                 |
 | `attempt_status`     | `pending`, `approved`, `rejected`, `awarded`, `canceled`                                                                                                             |
 | `approval_decision`  | `approved`, `rejected`                                                                                                                                               |
+
+enum 値のうち `member_status.invited`、`secret_item_status.withdrawn`、`auction_status.canceled` は MVP では遷移させない（欠番として残置）。
 
 `validation_status`（AI validation 用）は DB-4 確定（MVP 対象外）により削除。Phase 2 で AI validation を実装する際に再定義する（§15 参照）。
 
@@ -460,7 +434,7 @@ RLS:
 
 DB-4 確定（AI validation は MVP 対象外）のため `validation_status` / `validation_note` は持たない。Phase 2 で AI validation を実装する際にカラム追加のマイグレーションを行う。
 
-**2026-08-17: `seller_id` 列を削除**（3NF違反の解消）。MVPでは複数人出品（権利委譲・共同出品）はPhase 2スコープ外のため、出品者は常に `secrets.owner_id` と一致する。冗長な列として持たず、`secrets` への join で参照する（`DB-review.md` 指摘5への対応でもある）。
+**2026-08-17: `seller_id` 列を削除**（3NF違反の解消）。MVPでは複数人出品（権利委譲・共同出品）はPhase 2スコープ外のため、出品者は常に `secrets.owner_id` と一致する。冗長な列として持たず、`secrets` への join で参照する（[`archive/DB-review.md`](./archive/DB-review.md) 指摘5への対応でもある）。
 
 制約:
 
@@ -704,7 +678,7 @@ Storage bucket:
 | bucket               | 用途                | 公開                                              | 状態                                        |
 | -------------------- | ----------------- | ----------------------------------------------- | ------------------------------------------- |
 | `avatars`            | user / group icon | public（推測不可なランダムファイル名 + 5MB上限 + image/png・jpeg・webp限定） | 実装済み（`prisma/sql/common/004_avatars_storage.sql`。2026-08-18〜19） |
-| `challenge-evidence` | チャレンジ写真           | private                                          | 未実装（challengesドメイン未着手）                       |
+| `challenge-evidence` | チャレンジ写真           | private（5MB上限・png/jpeg/webp限定。本人と、その提出を参照する attempt の同グループメンバーだけが読める） | 実装済み（`prisma/sql/challenges/003_evidence_storage.sql`） |
 
 `avatars`は user avatar / group icon 共用の単一バケット。pathは `{アップロードしたuserId}/{ランダムなファイル名}` 固定（Storage層ではuser avatarかgroup iconかを区別しない）。書き込みはinsertのみ許可（update/delete不可のimmutable運用）で、「変更」は新しいpathへの再アップロード＋`users.avatar_path`/`groups.icon_path`の向け直しで行う。SELECTポリシーは意図的に無し（public配信は`storage.buckets.public`フラグ側で完結するため不要。バケット内容の列挙を防ぐ目的もある）。詳細な理由は`prisma/sql/common/004_avatars_storage.sql`のコメント参照。
 
@@ -843,6 +817,7 @@ RLS / view 条件:
 | `leave_group(group_id)`                             | member status を left、wallet を expired。最後の admin なら拒否                          |
 | `update_group_member_role(group_id, user_id, role)` | admin 権限付与 / 剥奪。最後の admin 剥奪は拒否                                               |
 | `kick_group_member(group_id, user_id)`              | admin による kick。wallet 失効                                                     |
+| `update_group` / `delete_group`                     | **未実装**。グループ名・`auction_open_seconds` の変更とグループ削除（issue #138）。現状 UI はモック |
 
 
 
@@ -1212,7 +1187,7 @@ no_sale
 | ~~DB-2~~ | ~~finalize 時に winner 残高不足になった場合の扱い~~ → **解決済み**。次点繰り上げ方式を採用（§10.2.1） | 入札後の残高変動との整合                         |
 | ~~DB-3~~ | ~~ディーラーに入札者を見せるか~~ → **解決済み**。見せる（P9 確定）                             | `bids` RLS / `bidder_identified_view`（§5.2） |
 | ~~DB-4~~ | ~~AI validation を MVP で使うか~~ → **解決済み**。MVP では使わない。`validation_status` 関連を削除 | §3 Enum、§4.9、§15                     |
-| DB-5     | チャレンジ内容の粒度                                                           | `challenges` の追加カラム。PRD でもシステム提供コンテンツ自体が未定のため、MVP は汎用的な器のまま先送り |
+| DB-5     | システム提供チャレンジ（`group_id` null）の中身                                        | PRD でシステム提供コンテンツ自体が未定。`challenges` は汎用的な器のまま（幹事作成のグループ独自チャレンジは実装済み）。必要になった時点でカラムを追加 |
 | ~~DB-6~~ | ~~wallet 残高を他メンバーに公開する UI があるか~~ → **解決済み**。作らない                        | `wallets` RLS / ranking view（追加なし）   |
 | ~~DB-7~~ | ~~コメント / リアクションを MVP に入れるか~~ → **解決済み**。MVP には入れない                     | secret viewer 周辺テーブル（追加なし）          |
 | DB-8     | ディーラー承認の無期限待機（P1）が長時間放置された場合の運用フォロー（リマインド通知等）                            | Phase 2。MVP は幹事の手動フォローに委ねる（`PRD.md` §9） |
@@ -1241,3 +1216,45 @@ no_sale
 - wallet 残高を他メンバーに公開する view / ランキング機能 — DB-6 確定（2026-08-17）。MVP は本人のみ残高を閲覧できる
 - 秘密 / オークションへのコメント・リアクション機能とその関連テーブル — DB-7 確定（2026-08-17）
 
+
+
+## 16. 変更履歴
+
+v2 での主な変更点:
+
+- P1 確定に伴い、オークション開始を「固定待機時間」から「ディーラー承認によるイベント駆動」に変更（§3 `auction_status`、§4.10、§6.2、§6.3、§10 を変更）
+- P9 確定（ディーラーへの入札者開示）に伴い、`seller_bid_view` をディーラーも見られるよう変更（§5.2）
+- DB-4 確定（AI validation は MVP 対象外）に伴い、`validation_status` 関連カラム・enum を削除（§3、§4.9、§15）
+- DB-6 / DB-7 確定（残高公開・コメント/リアクションは作らない）を §15 に明記
+- P2–P7・P11・P12 の確定値を `group_auction_settings` の既定値・各種計算ロジックに反映
+
+v3 での主な変更点（ハッカソンMVP向けスコープ削減。§14参照）:
+
+- `group_invites`（招待コード）を廃止し、直接招待方式に変更（`group_members.status` に `invited` を追加。§4.3、§4.4、§6.1）
+- `group_auction_settings` テーブルを廃止。P2（`auction_open_seconds`）のみ `groups` にカラムとして持ち、他の固定値はアプリ定数化（§4.5）
+- チャレンジ承認を単一承認に確定（`required_approvals` カラム廃止。§4.14、§6.4）
+- 次点繰り上げ（§10.2.1）・落札確定の2段階化（§10.2）は維持（変更なし）
+
+v4 での主な変更点（テーブル統合。DB-13参照）:
+
+- `secret_accesses` を廃止し `auctions.winner_id` に統合（冗長データの解消。§4.12）
+- `dealer_declines` を廃止し `wallet_ledger`（`kind='dealer_decline_fee'`）に統合。代わりに出品者向けの `get_dealer_decline_history` RPC を新設（§4.13、§6.3。2026-08-17レビュー反映: 当初のview案からRPC案に変更）
+- `challenge_approvals` を廃止し `challenge_attempts.reviewed_by`/`reviewed_decision`/`reviewed_at` に統合（単一承認確定に伴う自然な帰結。§4.16）
+- `secret_group_items.seller_id` を削除（`secrets.owner_id` への3NF違反的な冗長列だったため。§4.9）
+- テーブル数: 17見出し（廃止済みの欠番5つ: group_invites, group_auction_settings, secret_accesses, dealer_declines, challenge_approvals・任意追加のstorage_objects_metaを含む）→ 実質11テーブル（+ 任意でstorage_objects_meta）。内訳: users, groups, group_members, wallets, wallet_ledger, secrets, secret_group_items, auctions, bids, challenges, challenge_attempts
+
+v5 での主な変更点（PR #19 のレビュー指摘8件を反映）:
+
+- Codex指摘: `PRD.md`/`TRD.md`/`画面.md`/`機能要件.md`に残っていた招待コード・`group_auction_settings`前提の記述を、直接招待方式・アプリ定数の実態に合わせて修正
+- Codex指摘: `lib/auction-constants.ts` はドメイン非依存インフラ用の`lib/`に置くべきでないため、`features/auctions/constants.ts` へ移動（ESLint boundariesに`feature-shared`型を追加）
+- レビュー指摘: `invite_member`の再招待時（脱退/kick後の再招待）の状態遷移を明記。wallet再利用時は`balance=0`にリセット（ポイント非持ち越し）
+- レビュー指摘: `dealer_decline_history_view`案はRLS迂回リスクがあるため撤回し、`get_dealer_decline_history` RPCに変更
+- レビュー指摘: チャレンジ却下時（`decision='rejected'`）の`status`遷移が未定義だったため追加
+- レビュー指摘: `search_users`をgroup admin限定・最低検索文字数・件数上限付きに変更（ユーザー列挙API化を防止）
+- レビュー指摘: `groups.auction_open_seconds`に`CHECK (> 0)`制約を追加
+
+v6 での主な変更点（issue #71: 招待方式の変更）:
+
+- 2026-08-17に確定した直接招待方式（ニックネーム検索 `search_users` + `invite_member` + `accept_invite`/`decline_invite`）を廃止し、**URL招待方式**（`group_invite_links` + `create_group_invite_link` / `revoke_group_invite_link` / `join_group_via_invite_link`）に完全に置き換えた（ユーザー判断。§4.3、§4.4、§6.1）
+- `join_group_via_invite_link` は旧 `invite_member`＋`accept_invite` の2段階を1つの自己申告RPCに統合。参加は `invited` を経由せず直接 `active` になる
+- リンクは有効期限・使用回数制限を持たない。再発行（upsert）で旧リンクは自動失効。取り消しは行削除のみ（2026-08-17時点の「過剰」判断を踏まえ、実装自体は最小限に留めた）
