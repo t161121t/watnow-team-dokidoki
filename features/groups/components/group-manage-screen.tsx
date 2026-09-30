@@ -10,13 +10,10 @@ import { NeonCard } from "@/components/ui/neon-card";
 import { NeonField, NeonInput, NeonSelect } from "@/components/ui/neon-field";
 import { GroupIcon } from "@/features/groups/components/group-icon";
 import { InviteLinkSection } from "@/features/groups/components/invite-link-section";
-import {
-  avatarToneFromUserId,
-  initialsFromNickname,
-} from "@/features/groups/member-avatar";
 import { getGroup } from "@/features/groups/server/get-group";
 import { getInviteLink } from "@/features/groups/server/get-invite-link";
 import { listGroupMembers } from "@/features/groups/server/list-group-members";
+import { avatarToneFromUserId, initialsFromNickname } from "@/lib/avatar";
 import { getGroupNavigation } from "@/lib/navigation";
 import { getCurrentUserId } from "@/lib/supabase/server";
 
