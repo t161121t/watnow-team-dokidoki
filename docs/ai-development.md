@@ -32,13 +32,14 @@ AI は高速な下書き担当。**マージ責任は人間**。
 | `.agents/skills/<name>/` | **正本**（編集はここだけ） |
 | `.cursor/skills/<name>` | `.agents` への symlink |
 | `.claude/skills/<name>` | `.agents` への symlink |
+| `.windsurf/skills/<name>` | `.agents` への symlink |
 | `.claude/commands/<name>.md` | Claude コマンド（正本へ誘導） |
 | `.github/prompts/<name>.prompt.md` | Copilot プロンプト（正本へ誘導） |
 
 新規スキルを足すとき:
 
 1. `.agents/skills/<name>/SKILL.md` を作る
-2. `.cursor/skills/<name>` と `.claude/skills/<name>` を symlink する
+2. `.cursor/skills/<name>`・`.claude/skills/<name>`・`.windsurf/skills/<name>` を symlink する（`ln -s ../../.agents/skills/<name> .cursor/skills/<name>` など）
 3. 必要なら Claude command / Copilot prompt を薄い誘導ファイルとして追加
 
 コピーで三重管理しない（すぐズレる）。
