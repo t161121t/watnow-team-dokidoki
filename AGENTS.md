@@ -29,9 +29,10 @@
 
 ## 最初に読むもの
 
+0. `docs/README.md`（docs の索引・正本の優先順位・履歴資料の場所）
 1. `docs/概要まとめる.md`
 2. `docs/オークションルール.md`（オークション周りの現行コンセプト）
-3. `docs/コンセプト変更まとめ.md`（変更・残置・廃止の索引）
+3. `docs/PRD.md`（MVP の範囲・確定パラメータ P1–P12）
 4. `docs/機能要件.md`
 5. `docs/技術選定.md`
 6. `docs/画面.md` / `docs/ユーザーフロー .md`
@@ -101,6 +102,8 @@
 | `npm run verify:auth` | `create_profile` RPCが実DBで正しく動くかを検証（メールリンク経由のメール往復は対象外） |
 | `npm run verify:storage` | `avatars`バケットのRLSが実DBで正しく効くかを検証（実際のアップロードAPI呼び出しは対象外） |
 | `npm run verify:groups` | groupsドメインのRPC（search_users/decline_invite/leave_group等・最後のadminガード）を実DBで検証 |
+| `npm run verify:challenges` | challengesドメイン（submit / approve / create_group_challenge・クールダウン・自己承認不可・一覧取得）を実DBで検証 |
+| `npm run verify:wallet` | walletドメイン（履歴のページネーション・ディーラー辞退履歴）を実DBで検証 |
 | `npm run verify:secrets` | secretsドメインのRPC・View（register_secret/list_secret_for_auction/my_secret_collection_view等）を実DBで検証 |
 | `npm run verify:auctions` | auctionsドメインのRPC・View（decline_dealer/place_bidのガード・3つのView）を実DBで検証 |
 | `npm run verify:rls` | `withRlsContext` がRLSを正しく効かせるかを実DBで検証（テストユーザーを作成・削除） |

@@ -1,4 +1,4 @@
-// DB設計の正本は docs/DB.md（v5）。カラム定義・制約・RLS方針はそちらを参照。
+// DB設計の正本は docs/DB.md（v6以降。最新の変更履歴は同書 §16）。カラム定義・制約・RLS方針はそちらを参照。
 // テーブル名・カラム名はDBでは snake_case、Prisma Client からは camelCase で使う（@map/@@map）。
 //
 // 手動で追加する必要があるもの（Prismaのスキーマ言語では表現できない）:

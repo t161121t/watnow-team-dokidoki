@@ -1,6 +1,6 @@
 # TRD（技術要件定義書）— 秘密オークション（仮）
 
-ステータス: ドラフト（スタックは `技術選定.md` を参照。本ファイルはアーキ・配置・非機能・実装境界）  
+ステータス: 確定（スタックは `技術選定.md`、ディレクトリ構成は `アーキテクチャ.md` を参照。本ファイルはアーキ・配置・非機能・実装境界。2026-09-30 に実装へ追随）  
 作成日: 2026-08-14  
 言語: 日本語  
 対象: PWA 一本（iOS Web Push 制約は受け入れる）
@@ -18,14 +18,14 @@
 | [`AGENTS.md`](../AGENTS.md) | AI 実装の DoD・作業規律 |
 
 衝突時: **PRD の確定方針 > オークションルール > 本 TRD の実装方針 > 技術選定のツール詳細**。  
-スキーマ・RPC の具体名・カラムは実装時に Migrations で確定し、決まったら本 TRD を更新する（現状は論理モデル）。
+スキーマ・RPC の具体名・カラムの正は [`DB.md`](./DB.md)（実装は `prisma/schema.prisma` と `prisma/sql/`）。本 TRD の §6・§7 は論理モデルの要約。
 
 ---
 
 ## 1. システム概要
 
 ```text
-[ PWA: React 19 + Vite + TanStack Router/Query + RHF/Zod + Tailwind/shadcn ]
+[ PWA: React 19 + Next.js (App Router) + Prisma + RHF/Zod + Tailwind/shadcn ]
                     │
                     ▼
             Supabase (BaaS 完結)
@@ -39,7 +39,7 @@
 ```
 
 - ネイティブアプリは作らない
-- ホスティング想定: Cloudflare Pages（詳細設定は技術選定の未確定事項）
+- ホスティング: Vercel（`vercel.json`。リージョン hnd1）
 - ビジネスの中心: **PostgreSQL Function**。外部 HTTP / Storage 連携は **Edge Functions**
 
 スタックの列挙・Phase 別ツール導入は **`技術選定.md` を見ること**（ここには再掲しない）。
@@ -90,15 +90,15 @@
 
 ## 5. Realtime（MVP）
 
-**方針: 広め。** コア体験がリアルタイムである必要がある更新は MVP で購読する。
+**方針: 必要なところから足す。** 当初は広く購読する想定だったが、実装したのはオークションのみ。
 
-| 領域 | MVP | 備考 |
+| 領域 | 状態 | 備考 |
 | --- | --- | --- |
-| オークション詳細の現在価格・入札更新 | ✅ | 必須に近い |
-| オークション一覧の状態変化（開始/終了） | ✅ | |
-| チャレンジ承認の進捗 | ✅ | ミニゲーム内容が写真承認型になった場合に特に有効 |
-| グループお知らせ・メンバー変動 | ✅ | 広め方針に含む |
-| Web Push 相当のオフライン通知 | | Phase 2（技術選定） |
+| オークション詳細の現在価格・入札更新 | 実装済み | `auctions` を `supabase_realtime` に追加（`prisma/sql/auctions/006_realtime.sql`）、クライアントは `features/auctions/components/use-auction-realtime.ts` |
+| オークション一覧の状態変化（開始/終了） | 未実装 | 一覧は再読み込みで更新 |
+| チャレンジ承認の進捗 | 未実装 | 承認待ちタブの再読み込みで確認 |
+| グループお知らせ・メンバー変動 | 未実装 | |
+| Web Push 相当のオフライン通知 | Phase 2 | 技術選定 |
 
 チャネル設計（テーブル変更の filter、`group_id` スコープ）は実装時に決定。**他グループの変更が漏れないこと**を必須とする。
 
@@ -115,11 +115,11 @@
 | `group_members` | 所属、役割（member / admin） |
 | `wallets` | `(group_id, user_id)` 一意。残高（**マイナス可**）。入札は残高不足なら拒否 |
 | `wallet_ledger` | グループ単位の増減履歴 |
-| `secrets` | 本文、カテゴリ、レア度（自己申告）、状態（registered → listed → on_auction → sold / returned 等） |
-| `secret_listings` / `auctions` | 出品・競り。開始価格 = 出品価格（P3）、開始はディーラー承認によるイベント駆動（P1）、開放時間はグループ設定値・既定24時間（P2）、ディーラー |
+| `secrets` | タイトル・概要（ディーラー限定）・本文、カテゴリ、レア度（自己申告）。状態は `secret_group_items.status`（registered → listed → on_auction → sold / returned） |
+| `secret_group_items` / `auctions` | 出品（グループごとの秘密の扱い）・競り。開始価格 = 出品価格（P3）、開始はディーラー承認によるイベント駆動（P1）、開放時間はグループ設定値・既定24時間（P2）、ディーラー |
 | `bids` | 入札。**エスクローなし**（負けても残高拘束・消費なし）。勝者確定時のみ debit |
-| `challenges` / `challenge_attempts` / `challenge_approvals` | 機能枠。システム提供内容は未定 |
-| `collections` 相当 | 落札閲覧権・コレクション表示 |
+| `challenges` / `challenge_attempts` | 幹事作成・共通（`group_id` null）の両対応。承認は単一承認で `challenge_attempts.reviewed_*` に記録（`challenge_approvals` は廃止）。システム提供内容は未定 |
+| 落札閲覧権・コレクション | 独立テーブルは持たず `auctions.winner_id` が閲覧権の正本（`DB.md` §4.12） |
 
 ### 6.1 入札・残高の技術的帰結（PRD 確定事項）
 
@@ -141,14 +141,14 @@
 
 | RPC / 操作 | 責務 | 備考 |
 | --- | --- | --- |
-| `create_group` / `join_group` | 作成・参加・招待消費 | 幹事の初期設定 |
-| `register_secret` | 登録（未出品） | 任意で validation Edge 呼び出し |
-| `list_secret`（出品実施） | 状態遷移（`pending_dealer_approval`）+ 前払い credit（P4 確定・出品価格の100%） | dealer ランダム選抜も同時に行う |
-| `approve_dealer_assignment` | ディーラー承認。`open` へ遷移し `starts_at`/`ends_at` を確定（P1・P2） | ディーラー本人のみ |
+| `create_group` / `join_group_via_invite_link` / `create_group_invite_link` / `revoke_group_invite_link` | 作成・URL 招待による参加・招待URLの発行/取り消し | 幹事の初期設定 |
+| `register_secret` | 登録（未出品） | AI validation は MVP 対象外 |
+| `list_secret_for_auction`（出品実施） | 状態遷移（`pending_dealer_approval`）。dealer ランダム選抜も同時に行う | 前払い（P4・出品価格の100%）は出品時ではなくディーラー承認時に credit |
+| `approve_dealer_assignment` | ディーラー承認。`open` へ遷移し `starts_at`/`ends_at` を確定（P1・P2）。出品者へ前払いを credit（P4） | ディーラー本人のみ |
 | `place_bid` | 入札可能チェック・insert | エスクローなし。自出品不可。残高不足不可 |
-| `finalize_auction` | 終了・落札 debit・按分（P7・出品者70:ディーラー30）・状態更新 | cron から |
+| `claim_auction_for_finalize` / `finalize_auction` / `finalize_due_auctions` | 終了確定（2段階）・落札 debit・次点繰り上げ・按分（P7・出品者70:ディーラー30）・状態更新 | cron から（`prisma/sql/auctions/007_finalize_cron.sql`） |
 | `decline_dealer` | 辞退料 debit（P12 確定・出品価格の5%、完全没収）・再割当 | 開始（承認）前のみ可 |
-| `submit_challenge` / `approve_challenge` | 提出・承認・付与 | 中身未定でもインターフェースはグループ紐づけ必須 |
+| `submit_challenge` / `approve_challenge` / `create_group_challenge` | 提出・承認（単一承認）・付与・幹事によるチャレンジ作成 | グループ紐づけ必須 |
 | `leave_group` | 脱退・当該 wallet 失効 | |
 
 読取は RLS 下の Query を基本とし、集計や秘匿（他者への入札者非開示）は View / Function で制御する。
@@ -165,7 +165,7 @@
 | 用途 | MVP | 備考 |
 | --- | --- | --- |
 | アイコン画像 | ✅ | Storage + RLS |
-| チャレンジ写真 | 内容確定後 | Edge で検証。自己承認不可は PRD/機能要件 |
+| チャレンジ写真 | ✅ | private バケット `challenge-evidence`（5MB・png/jpeg/webp）。検証は `submit_challenge` RPC 内で行い、Edge Function は使っていない。自己承認不可は PRD/機能要件 |
 
 ---
 
@@ -191,9 +191,10 @@
 ### 10.1 MVP（Phase 1）
 
 - Frontend / Supabase 一式（技術選定どおり）
-- RLS + 主要 PostgreSQL Functions（グループ・秘密・wallet・入札・終了確定）
-- Realtime（§5 の広め）
-- Auth（Supabase・provider は広め）
+- RLS + 主要 PostgreSQL Functions（グループ・秘密・wallet・入札・終了確定）— 実装済み
+- Realtime（オークションのみ。§5）
+- Auth（Supabase・provider は広め）— Google OAuth・メール+パスワード
+- PWA の基本構成（manifest / service worker）— **未着手**（issue #137）
 - AI validation は**実施しない**（DB-4 確定）
 - マイナス残高スキーマ許容 + 入札時の非負十分残高チェック
 
@@ -207,11 +208,7 @@
 
 ### 10.3 技術選定上の未確定（引き継ぎ）
 
-`技術選定.md` §5 より:
-
-- `pg_cron` と Edge 通知トリガーの具体方式
-- Vite+ 移行タイミング
-- Cloudflare Pages のビルド設定
+`技術選定.md` §5 より: `pg_cron` と Edge 通知トリガーの具体方式（issue #43 で追跡）のみ。
 
 ---
 
@@ -219,9 +216,9 @@
 
 | 対象 | MVP | Phase 2 |
 | --- | --- | --- |
-| 入札 RPC・wallet 整合 | 重点（Vitest / SQL テスト） | |
-| 他グループ拒否（RLS） | 最低限の自動 or 手動手順を PR に残す | pgTAP 拡充 |
-| UI | Testing Library 中心 | Playwright |
+| 入札 RPC・wallet 整合 | 重点。実 DB に対する検証スクリプト（`npm run verify:auctions` / `verify:auction` / `verify:wallet`） | |
+| 他グループ拒否（RLS） | 検証スクリプト（`npm run verify:rls` ほか各ドメインの `verify:*`）で実 DB を確認。結果を PR に残す | pgTAP 拡充 |
+| UI | 未導入（Vitest / Testing Library は導入判断待ち。`技術選定.md` §4） | Playwright |
 | Auth / Realtime | 手動シナリオ可 | 自動化検討 |
 
 危険領域（Auth / RLS / Wallet / 入札）は PR に検証手順を残す（`AGENTS.md` DoD）。
@@ -235,7 +232,7 @@
 | ~~T1~~ | ~~P1–P7, P9–P12 の定数の置き場~~ → **解決済み**。P2のみ`groups.auction_open_seconds`、他はアプリ定数（`features/auctions/constants.ts`）に確定（`DB.md` §4.5） | PRD §6 |
 | T2 | 落札確定の時計（`pg_cron` 間隔、クライアント表示とのズレ） | 技術選定 §5 |
 | ~~T3~~ | ~~無料 AI の具体プロバイダとフォールバック~~ → **解消**。AI validation 自体を MVP 対象外に確定（DB-4）したため不要 | PRD §6 P10 |
-| T4 | ミニゲーム「器」のテーブル粒度（中身未定のままどこまで作るか） | PRD B5 |
+| ~~T4~~ | ~~ミニゲーム「器」のテーブル粒度~~ → **解決済み**。`challenges` / `challenge_attempts` の2テーブルで実装（`DB.md` §4.14・§4.15） | PRD §5.4 |
 | ~~T5~~ | ~~本番で有効化する Auth provider の確定~~ → **解決済み（2026-08-18）**。Magic Linkを実装（§4） → **2026-08-22、Google OAuth・メール+パスワードに切り替え**（UIに導線がないMagic Linkは削除。issue #76） | §4 |
 | ~~T6~~ | ~~入札一覧の匿名化を DB でやるか API でやるか~~ → **解決済み**。DB層のview（`bidder_identified_view` / `anonymous_bid_feed_view`）で対応（`prisma/sql/auctions/002_views.sql`） | 情報非対称 |
 
@@ -247,3 +244,4 @@
 | --- | --- |
 | 2026-08-14 | 初版。技術選定は参照のまま分離。Auth 広め / Realtime 広め / エスクローなし入札 / 自出品入札拒否 / マイナス残高許可＋入札は残高チェック / 条件付き AI validation を反映 |
 | 2026-08-17 | P1–P12 確定（`PRD.md` §6）を反映。AI validation は MVP 対象外に確定（T3 解消）。P1 の待機時間をディーラー承認によるイベント駆動に変更し、`approve_dealer_assignment` RPC を追加。T1 解決済みにマーク |
+| 2026-09-30 | 実装へ追随: スタックを Next.js + Prisma に、ホスティングを Vercel に、RPC 名を実装名に、Realtime をオークションのみ実装済みに、チャレンジ写真・テスト方針の現状を更新。T4 解決済み |
