@@ -20,10 +20,16 @@
 | `.agents/skills/*/SKILL.md` | **正本**（ここだけ編集） |
 | `.cursor/skills/*` | `.agents/skills/*` への symlink |
 | `.claude/skills/*` | `.agents/skills/*` への symlink |
+| `.windsurf/skills/*` | `.agents/skills/*` への symlink（Windsurf 用。全スキルを Cursor / Claude / Windsurf で同じ構成にする） |
 | `.claude/commands/` | Claude Code スラッシュコマンド（正本へ誘導） |
 | `.github/prompts/` | Copilot プロンプト（正本へ誘導） |
 
-現在: `create-pr`（「PR作成」「PR作って」「PRお願い」で起動）
+現在:
+
+- `create-pr`（「PR作成」「PR作って」「PRお願い」で起動）
+- `prisma-*`（Prisma 公式スキル。`skills-lock.json` で管理し、`.agents/skills/` に取り込む。手で編集しない）
+
+スキルを足すときは、3つのツールすべてに symlink を張る（`docs/ai-development.md`）。
 
 詳細フロー: `docs/ai-development.md`
 
