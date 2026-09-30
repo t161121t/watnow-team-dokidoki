@@ -36,7 +36,7 @@ app/  ─→  features/<domain>/components, features/<domain>/actions.ts
 
 ## 禁止事項
 
-- `features/<A>/components` から `features/<B>/*` を import しない（ドメイン間の直接依存を作らない）
+- `features/<A>/components` から `features/<B>/*` を import しない（ドメイン間の直接依存を作らない）。**例外: `features/<B>/actions.ts` は import してよい**（画面が別ドメインの操作を持つ場合。`docs/アーキテクチャ.md` §1.1b）。`server/`・`components/`・`types.ts` などは不可
 - `features/<domain>/components` から `features/<domain>/server/*` への直接 import は**読み取り専用**にする（書き込みは `actions.ts` を経由する）。ESLintは読み取り/書き込みを区別できないため、この使い分けはコードレビューで担保する
 - `features/<domain>/server` 以外から `@/lib/prisma` `@/lib/db/*` を import しない
 - ドメインをまたぐ処理（例: 落札確定で wallet と secrets の両方を更新する）は、アプリコードで2ドメインの server を両方呼ぶのではなく、**PostgreSQL Function 側でまとめる**（`prisma/sql/<domain>/`）。詳細は `AGENTS.md`「実装の置き場所」
