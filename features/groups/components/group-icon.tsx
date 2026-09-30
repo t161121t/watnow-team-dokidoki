@@ -1,4 +1,5 @@
-import { isUploadedIconPath, publicAvatarUrl } from "@/features/groups/icon";
+import { isUploadedIconPath } from "@/features/groups/icon";
+import { publicAvatarUrl } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 
 /**
