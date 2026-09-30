@@ -19,6 +19,36 @@ features/<domain>/
 
 ドメイン固有のルール・定数（按分比率など）は `lib/` に置かない（`lib/README.md`参照）。そのドメインの `constants.ts` に置く。
 
+## ドメインごとの現状
+
+| ドメイン | `components/` | `actions.ts` | `server/` | README | 備考 |
+| --- | --- | --- | --- | --- | --- |
+| `auth` | ✅ | ✅ | ✅ | ✅ | 横断ドメイン。サインイン・オンボーディング |
+| `groups` | ✅ | ✅ | ✅ | ✅ | 招待URL・メンバー管理を含む |
+| `secrets` | ✅ | ✅ | ✅ | ✅ | |
+| `auctions` | ✅ | ✅ | ✅ | ✅ | |
+| `challenges` | ✅ | ✅ | ✅ | ✅ | |
+| `wallet` | ✅ | — | ✅ | ✅ | 読み取り専用。書き込みは他ドメインの RPC 経由（ポイントの増減は `common/002` の内部関数） |
+| `users` | ✅ | — | — | ✅ | 画面だけ（プロフィール・アカウント設定）。更新は `auth/actions.ts`（`updateProfile` `updateEmail` `updatePassword` `signOut`）を呼ぶ |
+
+## ドメイン直下に置いてよいファイル
+
+`components/` `server/` `actions.ts` 以外は、そのドメイン内で共有する**純粋な値・型・関数**だけを直下に置く（DB・Next.js・Supabase に依存しないもの。ESLint 上は `feature-shared`）。
+
+| ファイル | 用途 | 例 |
+| --- | --- | --- |
+| `types.ts` | ドメインの型 | `features/groups/types.ts` |
+| `constants.ts` | ドメイン固有の定数（按分比など。`lib/` に置かない） | `features/auctions/constants.ts` |
+| `<用途>.ts` | 表示用の整形や判定などの純粋関数、タブ定義（`*-tab.ts`）、バリデーションスキーマ | `format.ts` `cooldown.ts` `secret-list-tab.ts` `validation.ts` |
+
+複数ドメインで使う汎用ヘルパーは `lib/` へ（例: アバター表示は `lib/avatar.ts`）。同じ関数をドメインごとにコピーしない。
+
+## `server/` のファイル名
+
+- 1ファイル1関数、`<動詞>-<対象>.ts`（kebab-case）
+- 取得は `get-` で始める（新規はこれに統一）。既存の `list-*.ts`（`list-my-secrets` `list-my-winnings` `list-secret-for-auction` `list-group-members`）は改名しない
+- 書き込みは RPC 名に合わせる（例: `place-bid.ts` ↔ `place_bid`、`decline-dealer.ts` ↔ `decline_dealer`）
+
 ## 依存の向き（ESLintで強制。`eslint.config.mjs` の boundaries 設定参照）
 
 ```
