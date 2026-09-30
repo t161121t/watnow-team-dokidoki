@@ -116,6 +116,11 @@ const architectureBoundaries = {
                   },
                 },
               },
+              // 書き込み（Server Action）は画面から呼ぶ。1つの画面が複数ドメインの
+              // 操作を持つことがあるため（例: 秘密詳細のディーラー承認ボタンは
+              // auctions/actions）、他ドメインのactions.tsも許可する（2026-09-30。
+              // docs/アーキテクチャ.md §1.1b）。server/・components等は同一ドメインのみ。
+              { to: { element: { type: "feature-actions" } } },
               { to: { element: { type: "components" } } },
               { to: { element: { type: "lib" } } },
               // server/を直接呼ぶRSCが自分でuserIdを取得できるようにするため
